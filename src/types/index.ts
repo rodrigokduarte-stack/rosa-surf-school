@@ -5,7 +5,8 @@ export interface RegistroAula {
   modalidade: 'Aula Particular' | 'Aula Grupo'
   nome_cliente: string
   valor_aula: number
-  status_pagamento: 'Pago' | 'Pendente'
+  valor_pago?: number  // Adicionamos o campo para salvar os valores parciais
+  status_pagamento: 'Pago' | 'Pendente' | 'Parcial' // Adicionamos o status 'Parcial'
   nome_professor: string[]  // array nativo: ['Pet', 'Dodo']
   forma_pagamento?: string
   observacoes?: string
