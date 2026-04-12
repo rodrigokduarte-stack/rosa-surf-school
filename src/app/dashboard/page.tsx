@@ -13,6 +13,7 @@ import FinanceiroTab from './components/FinanceiroTab'
 import InadimplentesTab from './components/InadimplentesTab'
 import PacotesTab from './components/PacotesTab'
 import TermosTab from './components/TermosTab'
+import ProfessoresTab from './components/ProfessoresTab'
 
 type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos' | 'professores'
 
@@ -95,17 +96,7 @@ export default function DashboardPage() {
         {tab === 'pendentes'  && <InadimplentesTab />}
         {tab === 'pacotes'    && <PacotesTab />}
         {tab === 'termos'     && <TermosTab />}
-        
-        {/* Placeholder da tela de Professores enquanto não criamos o arquivo */}
-        {tab === 'professores' && (
-          <div className="max-w-lg mx-auto p-8 flex flex-col items-center justify-center text-center mt-10">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-              <Users size={32} className="text-slate-400" />
-            </div>
-            <h2 className="text-xl font-bold text-slate-700">Equipe de Professores</h2>
-            <p className="text-sm text-slate-500 mt-2">A tela de cadastro será criada aqui!</p>
-          </div>
-        )}
+        {tab === 'professores' && <ProfessoresTab />}
       </div>
 
       {/* Dropdown Menu Flutuante "Mais" */}
