@@ -3,7 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Waves, LogOut, BookOpen, Receipt, BarChart2, AlertCircle, Package, FileText } from 'lucide-react'
+import { 
+  Waves, LogOut, BookOpen, Receipt, BarChart2, 
+  AlertCircle, Package, FileText, Menu, Users 
+} from 'lucide-react'
 import AulasTab from './components/AulasTab'
 import DespesasTab from './components/DespesasTab'
 import FinanceiroTab from './components/FinanceiroTab'
@@ -11,15 +14,13 @@ import InadimplentesTab from './components/InadimplentesTab'
 import PacotesTab from './components/PacotesTab'
 import TermosTab from './components/TermosTab'
 
-type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos'
+type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos' | 'professores'
 
-const NAV_ITEMS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: 'aulas',      label: 'Aulas',      icon: BookOpen  },
-  { id: 'despesas',   label: 'Despesas',   icon: Receipt   },
-  { id: 'financeiro', label: 'Financeiro', icon: BarChart2 },
-  { id: 'pendentes',  label: 'Pendentes',  icon: AlertCircle },
-  { id: 'pacotes',    label: 'Pacotes',    icon: Package   },
-  { id: 'termos',     label: 'Termos',     icon: FileText  },
+const MAIN_NAV: { id: Tab; icon: React.ElementType }[] = [
+  { id: 'aulas',      icon: BookOpen  },
+  { id: 'pacotes',    icon: Package   },
+  { id: 'despesas',   icon: Receipt   },
+  { id: 'financeiro', icon: BarChart2 },
 ]
 
 export default function DashboardPage() {
@@ -27,6 +28,7 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<Tab>('aulas')
   const [userName, setUserName] = useState('')
   const [checking, setChecking] = useState(true)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -49,6 +51,12 @@ export default function DashboardPage() {
         <div className="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
+  }
+
+  // Função auxiliar para fechar o menu ao trocar de aba
+  function changeTab(newTab: Tab) {
+    setTab(newTab)
+    setIsMenuOpen(false)
   }
 
   return (
@@ -79,37 +87,38 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Conteúdo da aba ativa — pb-24 para não ficar atrás da bottom nav */}
-      <div className="flex-1 pb-24">
+      {/* Conteúdo da aba ativa */}
+      <div className="flex-1 pb-20">
         {tab === 'aulas'      && <AulasTab />}
         {tab === 'despesas'   && <DespesasTab />}
         {tab === 'financeiro' && <FinanceiroTab />}
         {tab === 'pendentes'  && <InadimplentesTab />}
         {tab === 'pacotes'    && <PacotesTab />}
         {tab === 'termos'     && <TermosTab />}
+        
+        {/* Placeholder da tela de Professores enquanto não criamos o arquivo */}
+        {tab === 'professores' && (
+          <div className="max-w-lg mx-auto p-8 flex flex-col items-center justify-center text-center mt-10">
+            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+              <Users size={32} className="text-slate-400" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-700">Equipe de Professores</h2>
+            <p className="text-sm text-slate-500 mt-2">A tela de cadastro será criada aqui!</p>
+          </div>
+        )}
       </div>
 
-      {/* Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 flex">
-        {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
-          const active = tab === id
-          return (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors ${
-                active ? 'text-pink-600' : 'text-slate-400 hover:text-slate-600'
-              }`}
+      {/* Dropdown Menu Flutuante "Mais" */}
+      {isMenuOpen && (
+        <>
+          <div 
+            className="fixed inset-0 z-40 bg-black/5" 
+            onClick={() => setIsMenuOpen(false)} 
+          />
+          <div className="fixed bottom-20 right-4 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden w-48 py-2 animate-in fade-in slide-in-from-bottom-4">
+            <button 
+              onClick={() => changeTab('pendentes')} 
+              className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'pendentes' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
             >
-              <Icon size={20} strokeWidth={active ? 2.5 : 1.8} />
-              <span className={`text-[10px] font-medium leading-tight ${active ? 'text-pink-600' : 'text-slate-400'}`}>
-                {label}
-              </span>
+              <AlertCircle size={18} /> <span className="text-sm font-semibold">Pendentes</span>
             </button>
-          )
-        })}
-      </nav>
-
-    </div>
-  )
-}
