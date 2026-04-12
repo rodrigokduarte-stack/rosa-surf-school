@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Fundo rosa claro arredondado -->
+  <rect width="32" height="32" rx="8" fill="#fce7f3"/>
+  <!-- Onda principal (corpo preenchido) -->
+  <path d="M3 27 C3 28.7 4.3 30 6 30 L26 30 C27.7 30 29 28.7 29 27 L29 19 C26 15 23 18 20 15 C17 12 14 15 11 17 C8 19 6 16 3 19 Z" fill="#db2777"/>
+  <!-- Crista da onda (linha superior) -->
+  <path d="M3 19 C6 16 8 19 11 17 C14 15 17 12 20 15 C23 18 26 15 29 19" stroke="#db2777" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Espuma no topo da onda -->
+  <path d="M23 13 C25 10 28 11 29 13" stroke="#f9a8d4" stroke-width="2" stroke-linecap="round"/>
+</svg>
