@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Periodo, formatarData, formatarValor, parseProfessores, getRange } from '@/lib/dateUtils'
-import { User, Calendar, clock } from 'lucide-react'
+import { User, Calendar } from 'lucide-react'
 
 interface AcertoEntry {
   data: string
