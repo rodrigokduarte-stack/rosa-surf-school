@@ -122,3 +122,52 @@ export default function DashboardPage() {
             >
               <AlertCircle size={18} /> <span className="text-sm font-semibold">Pendentes</span>
             </button>
+            <button 
+              onClick={() => changeTab('termos')} 
+              className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'termos' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
+            >
+              <FileText size={18} /> <span className="text-sm font-semibold">Termos</span>
+            </button>
+            <button 
+              onClick={() => changeTab('professores')} 
+              className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'professores' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
+            >
+              <Users size={18} /> <span className="text-sm font-semibold">Professores</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Bottom Navigation Bar Minimalista */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 flex h-16 px-2 pb-safe">
+        {MAIN_NAV.map(({ id, icon: Icon }) => {
+          const active = tab === id
+          return (
+            <button
+              key={id}
+              onClick={() => changeTab(id)}
+              className={`flex-1 flex items-center justify-center transition-colors ${
+                active ? 'text-pink-600' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <Icon size={24} strokeWidth={active ? 2.5 : 2} />
+            </button>
+          )
+        })}
+
+        {/* Botão Hamburger (Mais) */}
+        <button
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          className={`flex-1 flex items-center justify-center transition-colors ${
+            isMenuOpen || ['pendentes', 'termos', 'professores'].includes(tab) 
+              ? 'text-pink-600' 
+              : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <Menu size={24} strokeWidth={isMenuOpen || ['pendentes', 'termos', 'professores'].includes(tab) ? 2.5 : 2} />
+        </button>
+      </nav>
+
+    </div>
+  )
+}
