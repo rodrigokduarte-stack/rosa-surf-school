@@ -20,10 +20,14 @@ const PROFESSORES = [
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
 
-type FormData = Omit<NovaAula, 'nome_professor' | 'pacote_id'>
+// Adicionamos valor_pago no FormData para o TypeScript não reclamar
+type FormData = Omit<NovaAula, 'nome_professor' | 'pacote_id'> & { valor_pago?: number }
+
+// Adicionamos valor_pago na tipagem local da Aula
+type AulaComPagamento = RegistroAula & { valor_pago?: number }
 
 export default function AulasTab() {
-  const [aulas, setAulas] = useState<RegistroAula[]>([])
+  const [aulas, setAulas] = useState<AulaComPagamento[]>([])
   const [loadingAulas, setLoadingAulas] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [sucesso, setSucesso] = useState(false)
@@ -34,13 +38,17 @@ export default function AulasTab() {
   const [pacoteSelecionado, setPacoteSelecionado] = useState<string>('')
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({
+  // Adicionamos o 'watch' para observar em tempo real o que foi selecionado no status
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<FormData>({
     defaultValues: {
       data_aula: hojeEmBrasilia(),
       status_pagamento: 'Pendente',
       modalidade: 'Aula Particular',
     },
   })
+
+  // Observa o campo de pagamento para mostrar ou esconder o box de valor parcial
+  const statusPagamento = watch('status_pagamento')
 
   const carregarAulas = useCallback(async () => {
     setLoadingAulas(true)
@@ -98,10 +106,19 @@ export default function AulasTab() {
     setProfessorError(false)
     setSalvando(true)
 
+    // Lógica para enviar o valor_pago correto para o banco
+    let valorFinalPago = 0
+    if (dados.status_pagamento === 'Pago') {
+      valorFinalPago = Number(dados.valor_aula)
+    } else if (dados.status_pagamento === 'Parcial') {
+      valorFinalPago = Number(dados.valor_pago) || 0
+    }
+
     const payload = {
       ...dados,
       nome_professor: professores,
       pacote_id: pacoteSelecionado || null,
+      valor_pago: valorFinalPago // Enviando para o Supabase
     }
 
     const { error } = await supabase.from('registro_aulas').insert([payload])
@@ -127,6 +144,7 @@ export default function AulasTab() {
         horario: '',
         nome_cliente: '',
         valor_aula: undefined,
+        valor_pago: undefined,
         modalidade: 'Aula Particular',
         status_pagamento: 'Pendente',
         forma_pagamento: undefined,
@@ -140,9 +158,14 @@ export default function AulasTab() {
   }
 
   const totalDia = aulas.reduce((sum, a) => sum + Number(a.valor_aula), 0)
-  const totalPago = aulas
-    .filter(a => a.status_pagamento === 'Pago')
-    .reduce((sum, a) => sum + Number(a.valor_aula), 0)
+  
+  // O Recebido agora soma tudo que foi 'Pago' inteiro + o que entrou 'Parcial'
+  const totalPago = aulas.reduce((sum, a) => {
+    if (a.status_pagamento === 'Pago') return sum + Number(a.valor_aula)
+    if (a.status_pagamento === 'Parcial') return sum + Number(a.valor_pago || 0)
+    return sum
+  }, 0)
+
   const temPacote = !!pacoteSelecionado
 
   return (
@@ -306,32 +329,53 @@ export default function AulasTab() {
 
             {/* Valor + Pagamento (oculto se pacote) */}
             {!temPacote && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    <span className="flex items-center gap-1"><DollarSign size={14} /> Valor (R$)</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0,00"
-                    {...register('valor_aula', { required: !temPacote, valueAsNumber: true })}
-                    className="w-full border border-slate-300 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500"
-                  />
-                  {errors.valor_aula && <p className="text-red-500 text-xs mt-1">Obrigatório</p>}
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <span className="flex items-center gap-1"><DollarSign size={14} /> Valor Total (R$)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0,00"
+                      {...register('valor_aula', { required: !temPacote, valueAsNumber: true })}
+                      className="w-full border border-slate-300 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    />
+                    {errors.valor_aula && <p className="text-red-500 text-xs mt-1">Obrigatório</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Status Pagamento</label>
+                    <select
+                      {...register('status_pagamento')}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white"
+                    >
+                      <option value="Pendente">Pendente</option>
+                      <option value="Parcial">Parcial</option>
+                      <option value="Pago">Pago Total</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Pagamento</label>
-                  <select
-                    {...register('status_pagamento')}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white"
-                  >
-                    <option value="Pendente">Pendente</option>
-                    <option value="Pago">Pago</option>
-                  </select>
-                </div>
-              </div>
+                
+                {/* O Box Mágico do Valor Parcial */}
+                {statusPagamento === 'Parcial' && (
+                  <div className="bg-sky-50 border border-sky-100 rounded-xl p-3 mt-1">
+                    <label className="block text-sm font-medium text-sky-900 mb-1">
+                      Quanto o cliente pagou de sinal? (R$)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Ex: 50,00"
+                      {...register('valor_pago', { required: statusPagamento === 'Parcial', valueAsNumber: true })}
+                      className="w-full border border-sky-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                    {errors.valor_pago && <p className="text-red-500 text-xs mt-1">Informe o valor parcial pago</p>}
+                  </div>
+                )}
+              </>
             )}
 
             {/* Forma de pagamento (apenas avulso) */}
@@ -433,14 +477,24 @@ export default function AulasTab() {
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span className="font-bold text-slate-800">{formatarValor(Number(aula.valor_aula))}</span>
+                    
+                    {/* Calcula quanto falta se for parcial */}
+                    {aula.status_pagamento === 'Parcial' && (
+                      <span className="text-xs text-sky-600 font-medium -mt-1.5">
+                        Falta: {formatarValor(Number(aula.valor_aula) - Number(aula.valor_pago || 0))}
+                      </span>
+                    )}
+
                     <span className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
                       aula.status_pagamento === 'Pago'
                         ? 'bg-emerald-100 text-emerald-700'
+                        : aula.status_pagamento === 'Parcial'
+                        ? 'bg-sky-100 text-sky-700'
                         : 'bg-amber-100 text-amber-700'
                     }`}>
-                      {aula.status_pagamento === 'Pago'
-                        ? <><CheckCircle size={11} /> Pago</>
-                        : <><AlertCircle size={11} /> Pendente</>}
+                      {aula.status_pagamento === 'Pago' && <><CheckCircle size={11} /> Pago</>}
+                      {aula.status_pagamento === 'Parcial' && <><AlertCircle size={11} /> Parcial</>}
+                      {aula.status_pagamento === 'Pendente' && <><AlertCircle size={11} /> Pendente</>}
                     </span>
                     {aula.forma_pagamento && (
                       <span className="text-xs text-slate-400">{aula.forma_pagamento}</span>
