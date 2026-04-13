@@ -7,8 +7,8 @@ import { TrendingUp, TrendingDown, DollarSign, Clock, Users, BarChart2, RefreshC
 import AcertoProfessores from './AcertoProfessores'
 
 interface DadosFinanceiros {
-  faturamentoBruto: number
-  aReceber: number
+  totalEmCaixa: number
+  totalAReceber: number
   custoProfessores: number
   custosOperacionais: number
   totalAulas: number
@@ -25,7 +25,7 @@ const PERIODOS: { id: Periodo; label: string }[] = [
 ]
 
 const DADOS_VAZIOS: DadosFinanceiros = {
-  faturamentoBruto: 0, aReceber: 0,
+  totalEmCaixa: 0, totalAReceber: 0,
   custoProfessores: 0, custosOperacionais: 0, totalAulas: 0,
   receitaPacotes: 0, inadimplenciaPacotes: 0, aulasARealizar: 0,
 }
@@ -40,9 +40,10 @@ export default function FinanceiroTab() {
     setLoading(true)
     const { inicio, fim } = getRange(p)
 
+    // Adicionamos o valor_pago na busca de aulas para o cálculo exato
     let aulasQ = supabase
       .from('registro_aulas')
-      .select('valor_aula, status_pagamento, nome_professor')
+      .select('valor_aula, valor_pago, status_pagamento, nome_professor')
     if (inicio) aulasQ = aulasQ.gte('data_aula', inicio)
     if (fim) aulasQ = aulasQ.lte('data_aula', fim)
 
@@ -58,6 +59,7 @@ export default function FinanceiroTab() {
     const custosList = custos ?? []
     const pacotesList = pacotes ?? []
 
+    // Agrupamento de categorias de custos
     setBreakdownCategorias(
       custosList.reduce((acc, c) => {
         const cat = (c.categoria as string) || 'Outros'
@@ -66,21 +68,38 @@ export default function FinanceiroTab() {
       }, {} as Record<string, number>)
     )
 
+    // 1. Cálculos de Aulas Avulsas
+    const recebidoAulas = aulasList.reduce((s, a) => {
+      if (a.status_pagamento === 'Pago') return s + Number(a.valor_aula)
+      if (a.status_pagamento === 'Parcial') return s + Number(a.valor_pago || 0)
+      return s
+    }, 0)
+
+    const aReceberAulas = aulasList.reduce((s, a) => {
+      if (a.status_pagamento === 'Pendente') return s + Number(a.valor_aula)
+      if (a.status_pagamento === 'Parcial') return s + Math.max(0, Number(a.valor_aula) - Number(a.valor_pago || 0))
+      return s
+    }, 0)
+
+    // 2. Cálculos de Pacotes
+    const recebidoPacotes = pacotesList.reduce((s, p) => s + Number(p.valor_pago), 0)
+    const aReceberPacotes = pacotesList.reduce((s, p) => s + Math.max(0, Number(p.valor_total) - Number(p.valor_pago)), 0)
+
+    // 3. Custos
+    const custoProfs = aulasList.reduce((s, a) => {
+      const n = parseProfessores(a.nome_professor).length || 1
+      return s + 100 * n
+    }, 0)
+    const despesas = custosList.reduce((s, c) => s + Number(c.valor_custo), 0)
+
     setDados({
-      faturamentoBruto: aulasList
-        .filter(a => a.status_pagamento === 'Pago')
-        .reduce((s, a) => s + Number(a.valor_aula), 0),
-      aReceber: aulasList
-        .filter(a => a.status_pagamento === 'Pendente')
-        .reduce((s, a) => s + Number(a.valor_aula), 0),
-      custoProfessores: aulasList.reduce((s, a) => {
-        const n = parseProfessores(a.nome_professor).length || 1
-        return s + 100 * n
-      }, 0),
-      custosOperacionais: custosList.reduce((s, c) => s + Number(c.valor_custo), 0),
+      totalEmCaixa: recebidoAulas + recebidoPacotes,
+      totalAReceber: aReceberAulas + aReceberPacotes,
+      custoProfessores: custoProfs,
+      custosOperacionais: despesas,
       totalAulas: aulasList.length,
-      receitaPacotes: pacotesList.reduce((s, p) => s + Number(p.valor_pago), 0),
-      inadimplenciaPacotes: pacotesList.reduce((s, p) => s + Math.max(0, Number(p.valor_total) - Number(p.valor_pago)), 0),
+      receitaPacotes: recebidoPacotes,
+      inadimplenciaPacotes: aReceberPacotes,
       aulasARealizar: pacotesList.reduce((s, p) => s + Number(p.aulas_restantes), 0),
     })
 
@@ -89,13 +108,13 @@ export default function FinanceiroTab() {
 
   useEffect(() => { fetchDados(periodo) }, [periodo])
 
-  const lucroLiquido = dados.faturamentoBruto - dados.custoProfessores - dados.custosOperacionais
+  // Lucro baseado em dinheiro real no caixa (Total Em Caixa - Custos)
+  const lucroLiquido = dados.totalEmCaixa - dados.custoProfessores - dados.custosOperacionais
   const labelPeriodo = PERIODOS.find(p => p.id === periodo)?.label ?? ''
 
   return (
     <div className="max-w-lg mx-auto px-4 py-5 flex flex-col gap-5">
 
-      {/* Título */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BarChart2 size={20} className="text-pink-600" />
@@ -110,7 +129,6 @@ export default function FinanceiroTab() {
         </button>
       </div>
 
-      {/* Seletor de período */}
       <div className="bg-white rounded-2xl p-1.5 shadow-sm flex gap-1">
         {PERIODOS.map(({ id, label }) => (
           <button
@@ -145,23 +163,23 @@ export default function FinanceiroTab() {
             </p>
           )}
 
-          {/* Receitas */}
+          {/* Métrica Global Unificada (Aulas + Pacotes) */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-emerald-600 rounded-2xl p-4 shadow-sm text-white">
               <div className="flex items-center gap-1.5 mb-3">
                 <div className="bg-white/20 p-1.5 rounded-lg"><DollarSign size={14} /></div>
-                <span className="text-xs font-semibold opacity-90">Faturamento Bruto</span>
+                <span className="text-xs font-semibold opacity-90">Em Caixa</span>
               </div>
-              <p className="text-2xl font-bold leading-tight">{formatarValor(dados.faturamentoBruto)}</p>
-              <p className="text-xs opacity-60 mt-1.5">Pagamentos recebidos</p>
+              <p className="text-2xl font-bold leading-tight">{formatarValor(dados.totalEmCaixa)}</p>
+              <p className="text-[10px] opacity-75 mt-1">Aulas e Pacotes recebidos</p>
             </div>
             <div className="bg-amber-500 rounded-2xl p-4 shadow-sm text-white">
               <div className="flex items-center gap-1.5 mb-3">
                 <div className="bg-white/20 p-1.5 rounded-lg"><Clock size={14} /></div>
                 <span className="text-xs font-semibold opacity-90">A Receber</span>
               </div>
-              <p className="text-2xl font-bold leading-tight">{formatarValor(dados.aReceber)}</p>
-              <p className="text-xs opacity-60 mt-1.5">Pagamentos pendentes</p>
+              <p className="text-2xl font-bold leading-tight">{formatarValor(dados.totalAReceber)}</p>
+              <p className="text-[10px] opacity-75 mt-1">Dívidas totais na rua</p>
             </div>
           </div>
 
@@ -200,14 +218,14 @@ export default function FinanceiroTab() {
                 <div className="bg-white/20 p-2 rounded-xl">
                   {lucroLiquido >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
                 </div>
-                <span className="font-bold text-base">Lucro Líquido</span>
+                <span className="font-bold text-base">Lucro Líquido Real</span>
               </div>
               <span className="text-xs bg-white/20 px-3 py-1 rounded-full font-medium">{labelPeriodo}</span>
             </div>
             <p className="text-4xl font-bold mb-3">{formatarValor(lucroLiquido)}</p>
             <div className="border-t border-white/20 pt-3 flex flex-col gap-1">
               <div className="flex justify-between text-xs opacity-75">
-                <span>Faturamento</span><span>{formatarValor(dados.faturamentoBruto)}</span>
+                <span>Dinheiro em Caixa</span><span>{formatarValor(dados.totalEmCaixa)}</span>
               </div>
               <div className="flex justify-between text-xs opacity-75">
                 <span>− Custo Professores</span><span>{formatarValor(dados.custoProfessores)}</span>
@@ -218,27 +236,27 @@ export default function FinanceiroTab() {
             </div>
           </div>
 
-          {/* Pacotes */}
+          {/* Resumo Específico de Pacotes */}
           <div>
             <div className="flex items-center gap-2 mb-3 px-1">
               <Package size={17} className="text-pink-600" />
-              <h3 className="text-base font-bold text-slate-800">Pacotes</h3>
+              <h3 className="text-base font-bold text-slate-800">Detalhe de Pacotes</h3>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 text-center">
                 <p className="text-xs font-semibold text-slate-500 mb-1">Receita</p>
                 <p className="text-base font-bold text-emerald-600">{formatarValor(dados.receitaPacotes)}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">valor pago</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">já pago</p>
               </div>
               <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 text-center">
-                <p className="text-xs font-semibold text-slate-500 mb-1">Pendente</p>
+                <p className="text-xs font-semibold text-slate-500 mb-1">Dívidas</p>
                 <p className="text-base font-bold text-amber-600">{formatarValor(dados.inadimplenciaPacotes)}</p>
                 <p className="text-[10px] text-slate-400 mt-0.5">a receber</p>
               </div>
               <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 text-center">
                 <p className="text-xs font-semibold text-slate-500 mb-1">Aulas</p>
                 <p className="text-base font-bold text-slate-700">{dados.aulasARealizar}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">a realizar</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">a entregar</p>
               </div>
             </div>
           </div>
