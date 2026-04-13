@@ -3,20 +3,24 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { RegistroAula, Pacote } from '@/types'
-import { CheckCircle, AlertCircle, Clock, User, DollarSign, MessageCircle, X, Package } from 'lucide-react'
+// Removi o ícone User que estava sem uso
+import { CheckCircle, AlertCircle, Clock, DollarSign, MessageCircle, X, Package } from 'lucide-react'
 import { formatarData, formatarValor } from '@/lib/dateUtils'
+
+// Criamos um "Aviso" para o TypeScript entender o valor_pago
+type AulaComPagamento = RegistroAula & { valor_pago?: number }
 
 function formatarNumero(value: string): string {
   return value.replace(/[^\d\s\-()+ ]/g, '')
 }
 
 export default function InadimplentesTab() {
-  const [aulas, setAulas] = useState<RegistroAula[]>([])
+  // Aplicamos a tipagem nova aqui
+  const [aulas, setAulas] = useState<AulaComPagamento[]>([])
   const [pacotes, setPacotes] = useState<Pacote[]>([])
   const [loading, setLoading] = useState(true)
   const [liquidando, setLiquidando] = useState<string | null>(null)
   
-  // Controle de Cobrança
   const [cobrancaId, setCobrancaId] = useState<string | null>(null)
   const [cobrancaTipo, setCobrancaTipo] = useState<'aula' | 'pacote' | null>(null)
   const [numero, setNumero] = useState('')
@@ -24,7 +28,6 @@ export default function InadimplentesTab() {
   const carregarInadimplentes = useCallback(async () => {
     setLoading(true)
     
-    // Busca aulas com status Pendente OU Parcial
     const { data: aulasData } = await supabase
       .from('registro_aulas')
       .select('*')
@@ -32,7 +35,6 @@ export default function InadimplentesTab() {
       .order('data_aula', { ascending: false })
       .order('horario', { ascending: true })
     
-    // Busca todos os pacotes e filtra os devedores no frontend
     const { data: pacotesData } = await supabase
       .from('pacotes')
       .select('*')
@@ -47,13 +49,14 @@ export default function InadimplentesTab() {
 
   useEffect(() => { carregarInadimplentes() }, [carregarInadimplentes])
 
-  async function liquidarAula(aula: RegistroAula) {
+  // Aplicamos a tipagem nova aqui
+  async function liquidarAula(aula: AulaComPagamento) {
     setLiquidando(aula.id)
     const { error } = await supabase
       .from('registro_aulas')
       .update({ 
         status_pagamento: 'Pago',
-        valor_pago: aula.valor_aula // Preenche 100%
+        valor_pago: aula.valor_aula
       })
       .eq('id', aula.id)
     
@@ -66,7 +69,7 @@ export default function InadimplentesTab() {
     const { error } = await supabase
       .from('pacotes')
       .update({ 
-        valor_pago: pacote.valor_total // Quita 100%
+        valor_pago: pacote.valor_total
       })
       .eq('id', pacote.id)
     
@@ -86,7 +89,8 @@ export default function InadimplentesTab() {
     setNumero('')
   }
 
-  function enviarWhatsAppAula(aula: RegistroAula) {
+  // Aplicamos a tipagem nova aqui
+  function enviarWhatsAppAula(aula: AulaComPagamento) {
     const digits = numero.replace(/\D/g, '')
     if (digits.length < 7) return
     const data = formatarData(aula.data_aula)
@@ -234,4 +238,4 @@ export default function InadimplentesTab() {
                           <p className="text-xs font-semibold text-slate-600">WhatsApp do Cliente</p>
                           <button onClick={fecharCobranca} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
                         </div>
-                        <input type="tel" value={numero}
+                        <input type="tel" value={numero} onChange={e
