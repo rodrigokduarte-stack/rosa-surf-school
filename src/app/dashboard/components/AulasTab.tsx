@@ -10,14 +10,6 @@ import {
   ChevronDown, ChevronUp, CheckCircle, AlertCircle, Package, Trash2,
 } from 'lucide-react'
 
-const PROFESSORES = [
-  'Arthur Jobim',
-  'Deivid Lemos',
-  'Matheus Bacellar',
-  'Guilherme Kaiser',
-  'Lucas Catapam',
-]
-
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
 
 // Adicionamos valor_pago no FormData para o TypeScript não reclamar
@@ -32,13 +24,17 @@ export default function AulasTab() {
   const [salvando, setSalvando] = useState(false)
   const [sucesso, setSucesso] = useState(false)
   const [formAberto, setFormAberto] = useState(true)
+  
+  // Estado para guardar a lista oficial de professores vinda do banco
+  const [listaProfessores, setListaProfessores] = useState<string[]>([])
+  // Estado para guardar quais professores foram selecionados no formulário
   const [professores, setProfessores] = useState<string[]>([])
   const [professorError, setProfessorError] = useState(false)
+  
   const [pacotes, setPacotes] = useState<Pacote[]>([])
   const [pacoteSelecionado, setPacoteSelecionado] = useState<string>('')
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
-  // Adicionamos o 'watch' para observar em tempo real o que foi selecionado no status
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<FormData>({
     defaultValues: {
       data_aula: hojeEmBrasilia(),
@@ -47,8 +43,18 @@ export default function AulasTab() {
     },
   })
 
-  // Observa o campo de pagamento para mostrar ou esconder o box de valor parcial
   const statusPagamento = watch('status_pagamento')
+
+  // Nova função: Busca os professores cadastrados no Supabase
+  const carregarListaProfessores = useCallback(async () => {
+    const { data } = await supabase
+      .from('professores')
+      .select('nome')
+      .order('nome', { ascending: true })
+    if (data) {
+      setListaProfessores(data.map(p => p.nome))
+    }
+  }, [])
 
   const carregarAulas = useCallback(async () => {
     setLoadingAulas(true)
@@ -71,8 +77,11 @@ export default function AulasTab() {
     setPacotes(data ?? [])
   }, [])
 
-  useEffect(() => { carregarAulas() }, [carregarAulas])
-  useEffect(() => { carregarPacotes() }, [carregarPacotes])
+  useEffect(() => { 
+    carregarAulas() 
+    carregarPacotes()
+    carregarListaProfessores()
+  }, [carregarAulas, carregarPacotes, carregarListaProfessores])
 
   async function excluirAula(id: string, nomeCliente: string) {
     if (!window.confirm(`Excluir a aula de "${nomeCliente}"?`)) return
@@ -106,7 +115,6 @@ export default function AulasTab() {
     setProfessorError(false)
     setSalvando(true)
 
-    // Lógica para enviar o valor_pago correto para o banco
     let valorFinalPago = 0
     if (dados.status_pagamento === 'Pago') {
       valorFinalPago = Number(dados.valor_aula)
@@ -118,7 +126,7 @@ export default function AulasTab() {
       ...dados,
       nome_professor: professores,
       pacote_id: pacoteSelecionado || null,
-      valor_pago: valorFinalPago // Enviando para o Supabase
+      valor_pago: valorFinalPago
     }
 
     const { error } = await supabase.from('registro_aulas').insert([payload])
@@ -159,7 +167,6 @@ export default function AulasTab() {
 
   const totalDia = aulas.reduce((sum, a) => sum + Number(a.valor_aula), 0)
   
-  // O Recebido agora soma tudo que foi 'Pago' inteiro + o que entrou 'Parcial'
   const totalPago = aulas.reduce((sum, a) => {
     if (a.status_pagamento === 'Pago') return sum + Number(a.valor_aula)
     if (a.status_pagamento === 'Parcial') return sum + Number(a.valor_pago || 0)
@@ -171,7 +178,6 @@ export default function AulasTab() {
   return (
     <div className="max-w-lg mx-auto px-4 py-5 flex flex-col gap-5">
 
-      {/* Resumo do dia */}
       {aulas.length > 0 && (
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-2xl p-3 shadow-sm text-center">
@@ -189,7 +195,6 @@ export default function AulasTab() {
         </div>
       )}
 
-      {/* Formulário */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
         <button
           onClick={() => setFormAberto(v => !v)}
@@ -209,7 +214,6 @@ export default function AulasTab() {
             onSubmit={handleSubmit(onSubmit)}
             className="px-5 pb-5 flex flex-col gap-4 border-t border-slate-100 pt-4"
           >
-            {/* Data + Horário */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
@@ -230,7 +234,6 @@ export default function AulasTab() {
               </div>
             </div>
 
-            {/* Modalidade */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Modalidade</label>
               <div className="grid grid-cols-2 gap-3">
@@ -245,7 +248,6 @@ export default function AulasTab() {
               </div>
             </div>
 
-            {/* Cliente */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 <span className="flex items-center gap-1"><User size={14} /> Nome do Cliente</span>
@@ -259,49 +261,52 @@ export default function AulasTab() {
               {errors.nome_cliente && <p className="text-red-500 text-xs mt-1">Obrigatório</p>}
             </div>
 
-            {/* Professor(es) — checkboxes */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <span className="flex items-center gap-1"><User size={14} /> Professor(es)</span>
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                {PROFESSORES.map(nome => {
-                  const sel = professores.includes(nome)
-                  return (
-                    <label
-                      key={nome}
-                      className={`flex items-center gap-2.5 border-2 rounded-xl px-3 py-2.5 cursor-pointer transition-all ${
-                        sel
-                          ? 'border-pink-500 bg-pink-50'
-                          : 'border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="sr-only"
-                        checked={sel}
-                        onChange={() => toggleProfessor(nome)}
-                      />
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                        sel ? 'bg-pink-600 border-pink-600' : 'border-slate-300'
-                      }`}>
-                        {sel && <CheckCircle size={10} className="text-white" />}
-                      </div>
-                      <span className={`text-sm font-medium leading-tight ${
-                        sel ? 'text-pink-700' : 'text-slate-600'
-                      }`}>
-                        {nome}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
+              
+              {listaProfessores.length === 0 ? (
+                 <p className="text-xs text-slate-400 italic">Nenhum professor cadastrado ainda.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {listaProfessores.map(nome => {
+                    const sel = professores.includes(nome)
+                    return (
+                      <label
+                        key={nome}
+                        className={`flex items-center gap-2.5 border-2 rounded-xl px-3 py-2.5 cursor-pointer transition-all ${
+                          sel
+                            ? 'border-pink-500 bg-pink-50'
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={sel}
+                          onChange={() => toggleProfessor(nome)}
+                        />
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                          sel ? 'bg-pink-600 border-pink-600' : 'border-slate-300'
+                        }`}>
+                          {sel && <CheckCircle size={10} className="text-white" />}
+                        </div>
+                        <span className={`text-sm font-medium leading-tight ${
+                          sel ? 'text-pink-700' : 'text-slate-600'
+                        }`}>
+                          {nome}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
               {professorError && (
                 <p className="text-red-500 text-xs mt-1.5">Selecione ao menos um professor</p>
               )}
             </div>
 
-            {/* Pacote (opcional) */}
             {pacotes.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -327,7 +332,6 @@ export default function AulasTab() {
               </div>
             )}
 
-            {/* Valor + Pagamento (oculto se pacote) */}
             {!temPacote && (
               <>
                 <div className="grid grid-cols-2 gap-3">
@@ -358,7 +362,6 @@ export default function AulasTab() {
                   </div>
                 </div>
                 
-                {/* O Box Mágico do Valor Parcial */}
                 {statusPagamento === 'Parcial' && (
                   <div className="bg-sky-50 border border-sky-100 rounded-xl p-3 mt-1">
                     <label className="block text-sm font-medium text-sky-900 mb-1">
@@ -378,7 +381,6 @@ export default function AulasTab() {
               </>
             )}
 
-            {/* Forma de pagamento (apenas avulso) */}
             {!temPacote && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Forma de Pagamento</label>
@@ -394,7 +396,6 @@ export default function AulasTab() {
               </div>
             )}
 
-            {/* Observações */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Observações (opcional)</label>
               <textarea
@@ -424,7 +425,6 @@ export default function AulasTab() {
         )}
       </div>
 
-      {/* Lista de aulas do dia */}
       <div>
         <h2 className="text-base font-semibold text-slate-700 mb-3 px-1 flex items-center gap-2">
           <Clock size={16} className="text-pink-500" />
@@ -478,7 +478,6 @@ export default function AulasTab() {
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span className="font-bold text-slate-800">{formatarValor(Number(aula.valor_aula))}</span>
                     
-                    {/* Calcula quanto falta se for parcial */}
                     {aula.status_pagamento === 'Parcial' && (
                       <span className="text-xs text-sky-600 font-medium -mt-1.5">
                         Falta: {formatarValor(Number(aula.valor_aula) - Number(aula.valor_pago || 0))}
