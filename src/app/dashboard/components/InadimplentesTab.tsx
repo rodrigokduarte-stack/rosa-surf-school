@@ -3,11 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { RegistroAula, Pacote } from '@/types'
-// Removi o ícone User que estava sem uso
 import { CheckCircle, AlertCircle, Clock, DollarSign, MessageCircle, X, Package } from 'lucide-react'
 import { formatarData, formatarValor } from '@/lib/dateUtils'
 
-// Criamos um "Aviso" para o TypeScript entender o valor_pago
 type AulaComPagamento = RegistroAula & { valor_pago?: number }
 
 function formatarNumero(value: string): string {
@@ -15,7 +13,6 @@ function formatarNumero(value: string): string {
 }
 
 export default function InadimplentesTab() {
-  // Aplicamos a tipagem nova aqui
   const [aulas, setAulas] = useState<AulaComPagamento[]>([])
   const [pacotes, setPacotes] = useState<Pacote[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,7 +46,6 @@ export default function InadimplentesTab() {
 
   useEffect(() => { carregarInadimplentes() }, [carregarInadimplentes])
 
-  // Aplicamos a tipagem nova aqui
   async function liquidarAula(aula: AulaComPagamento) {
     setLiquidando(aula.id)
     const { error } = await supabase
@@ -89,7 +85,6 @@ export default function InadimplentesTab() {
     setNumero('')
   }
 
-  // Aplicamos a tipagem nova aqui
   function enviarWhatsAppAula(aula: AulaComPagamento) {
     const digits = numero.replace(/\D/g, '')
     if (digits.length < 7) return
@@ -238,4 +233,20 @@ export default function InadimplentesTab() {
                           <p className="text-xs font-semibold text-slate-600">WhatsApp do Cliente</p>
                           <button onClick={fecharCobranca} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
                         </div>
-                        <input type="tel" value={numero} onChange={e
+                        <input type="tel" value={numero} onChange={e => setNumero(formatarNumero(e.target.value))} placeholder="+55 11 99999-9999" className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                        <button onClick={() => enviarWhatsAppAula(aula)} disabled={numero.replace(/\D/g, '').length < 7} className="mt-2 w-full bg-[#25D366] hover:bg-[#1ebe5c] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                          <MessageCircle size={15} /> Abrir WhatsApp
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+      <div className="h-4" />
+    </div>
+  )
+}
