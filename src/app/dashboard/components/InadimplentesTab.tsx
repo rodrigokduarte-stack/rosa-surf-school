@@ -4,9 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { RegistroAula, Pacote } from '@/types'
 import { formatarValor, hojeEmBrasilia } from '@/lib/dateUtils'
-import { AlertCircle, CheckCircle, MessageCircle, ChevronDown, ChevronUp, X, DollarSign, Wallet } from 'lucide-react'
+import { CheckCircle, MessageCircle, ChevronDown, ChevronUp, DollarSign, Wallet } from 'lucide-react'
 
-// Tipo unificado para facilitar a UI
 type Devedor = {
   id: string
   tipo: 'aula' | 'pacote'
@@ -16,7 +15,7 @@ type Devedor = {
   valor_total: number
   valor_pago: number
   dias_atraso: number
-  dados_originais: any
+  original_id: string
 }
 
 function calcularDiasAtraso(dataReferencia: string) {
@@ -27,9 +26,18 @@ function calcularDiasAtraso(dataReferencia: string) {
 }
 
 function configUrgencia(dias: number) {
-  if (dias >= 30) return { label: "Crítico", bg: "bg-rose-50", border: "border-rose-200", badge: "bg-rose-500", text: "text-rose-700", bar: "bg-rose-500" }
-  if (dias >= 15) return { label: "Atrasado", bg: "bg-amber-50", border: "border-amber-200", badge: "bg-amber-500", text: "text-amber-700", bar: "bg-amber-500" }
-  return { label: "Recente", bg: "bg-emerald-50", border: "border-emerald-200", badge: "bg-emerald-500", text: "text-emerald-700", bar: "bg-emerald-500" }
+  if (dias >= 30) return { 
+    label: "Crítico", bg: "bg-rose-50", border: "border-rose-200", 
+    badge: "bg-rose-500", text: "text-rose-700", bar: "bg-rose-500" 
+  }
+  if (dias >= 15) return { 
+    label: "Atrasado", bg: "bg-amber-50", border: "border-amber-200", 
+    badge: "bg-amber-500", text: "text-amber-700", bar: "bg-amber-500" 
+  }
+  return { 
+    label: "Recente", bg: "bg-emerald-50", border: "border-emerald-200", 
+    badge: "bg-emerald-500", text: "text-emerald-700", bar: "bg-emerald-500" 
+  }
 }
 
 export default function InadimplentesTab() {
@@ -37,7 +45,6 @@ export default function InadimplentesTab() {
   const [loading, setLoading] = useState(true)
   const [expandido, setExpandido] = useState<string | null>(null)
   
-  // Controle do Modal de Pagamento (Payment Sheet)
   const [devedorSelecionado, setDevedorSelecionado] = useState<Devedor | null>(null)
   const [valorRecebido, setValorRecebido] = useState<string>('')
   const [processando, setProcessando] = useState(false)
@@ -45,13 +52,11 @@ export default function InadimplentesTab() {
   const carregarInadimplentes = useCallback(async () => {
     setLoading(true)
     
-    // Busca Aulas Pendentes/Parciais
     const { data: aulasData } = await supabase
       .from('registro_aulas')
       .select('*')
       .in('status_pagamento', ['Pendente', 'Parcial'])
-    
-    // Busca Pacotes Devendo
+      
     const { data: pacotesData } = await supabase
       .from('pacotes')
       .select('*')
@@ -67,27 +72,29 @@ export default function InadimplentesTab() {
         valor_total: Number(a.valor_aula),
         valor_pago: Number(a.valor_pago || 0),
         dias_atraso: calcularDiasAtraso(a.data_aula),
-        dados_originais: a
+        original_id: a.id
       })
     })
 
     pacotesData?.forEach((p: Pacote) => {
       if (Number(p.valor_pago) < Number(p.valor_total)) {
+        // Trava de segurança para a data de criação
+        const dataCriacao = p.created_at ? p.created_at.split('T')[0] : hojeEmBrasilia()
+        
         lista.push({
           id: `pacote-${p.id}`,
           tipo: 'pacote',
           nome: p.nome_cliente,
           descricao: `Pacote (${p.aulas_restantes} restantes)`,
-          telefone: p.telefone,
+          // Removida a linha do telefone que estava quebrando o código
           valor_total: Number(p.valor_total),
           valor_pago: Number(p.valor_pago || 0),
-          dias_atraso: calcularDiasAtraso(p.created_at.split('T')[0]),
-          dados_originais: p
+          dias_atraso: calcularDiasAtraso(dataCriacao),
+          original_id: p.id
         })
       }
     })
 
-    // Ordena pelos mais atrasados
     lista.sort((a, b) => b.dias_atraso - a.dias_atraso)
     setDevedores(lista)
     setLoading(false)
@@ -95,8 +102,7 @@ export default function InadimplentesTab() {
 
   useEffect(() => { carregarInadimplentes() }, [carregarInadimplentes])
 
-  // Lógica pesada de pagamento parcial
-  async function confirmarPagamento(e: React.FormEvent) {
+  async function confirmarPagamento(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!devedorSelecionado || !valorRecebido) return
     
@@ -109,11 +115,11 @@ export default function InadimplentesTab() {
       await supabase.from('registro_aulas').update({ 
         status_pagamento: quitou ? 'Pago' : 'Parcial',
         valor_pago: quitou ? devedorSelecionado.valor_total : novoValorPago
-      }).eq('id', devedorSelecionado.dados_originais.id)
+      }).eq('id', devedorSelecionado.original_id)
     } else {
       await supabase.from('pacotes').update({ 
         valor_pago: quitou ? devedorSelecionado.valor_total : novoValorPago
-      }).eq('id', devedorSelecionado.dados_originais.id)
+      }).eq('id', devedorSelecionado.original_id)
     }
 
     setProcessando(false)
@@ -126,7 +132,7 @@ export default function InadimplentesTab() {
     const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}). Podemos acertar? 🏄‍♂️`)
     const fone = d.telefone?.replace(/\D/g, '') || ''
     if(fone) window.open(`https://wa.me/55${fone}?text=${texto}`, '_blank')
-    else alert("Cliente sem telefone salvo no cadastro do pacote.")
+    else alert("Cliente sem telefone salvo.")
   }
 
   const totalEmAberto = devedores.reduce((s, d) => s + (d.valor_total - d.valor_pago), 0)
@@ -135,11 +141,11 @@ export default function InadimplentesTab() {
   return (
     <>
       <div className="px-4 py-2 flex flex-col gap-6">
-
-        {/* Faixa de KPIs (Resumo Nubank Style) */}
         <div className="flex gap-3 -mt-6">
           <div className="flex-[1.2] bg-gradient-to-br from-rose-500 to-red-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(225,29,72,0.3)] relative overflow-hidden">
-            <span className="text-[26px] font-black text-white leading-tight mt-1">{formatarValor(totalEmAberto)}</span>
+            <span className="text-[26px] font-black text-white leading-tight mt-1">
+              {formatarValor(totalEmAberto)}
+            </span>
             <span className="text-[11px] font-medium text-white/80 mt-1">Total na rua</span>
             <Wallet size={80} className="absolute -bottom-4 -right-4 text-white opacity-10" />
           </div>
@@ -156,7 +162,6 @@ export default function InadimplentesTab() {
           </div>
         </div>
 
-        {/* Lista de Cards Premium */}
         <div>
           <h2 className="text-[15px] font-bold text-slate-800 flex items-center gap-2 mb-4">
             <span className="w-2 h-2 rounded-full bg-rose-500" /> Cobranças Ativas
@@ -182,8 +187,6 @@ export default function InadimplentesTab() {
 
                 return (
                   <div key={dev.id} className={`bg-white rounded-[20px] p-4 border shadow-sm transition-all ${cfg.border}`}>
-                    
-                    {/* Header do Card */}
                     <div className="flex items-start justify-between cursor-pointer" onClick={() => setExpandido(isOp ? null : dev.id)}>
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${cfg.badge}`}>
@@ -202,22 +205,30 @@ export default function InadimplentesTab() {
                       {isOp ? <ChevronUp size={16} className="text-slate-400 mt-1" /> : <ChevronDown size={16} className="text-slate-400 mt-1" />}
                     </div>
 
-                    {/* Barra de Progresso */}
                     <div className="mt-4 mb-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full transition-all duration-500 ${cfg.bar}`} style={{ width: `${pctPago}%` }} />
                     </div>
                     <div className="flex justify-between items-center mt-1.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pago: {formatarValor(dev.valor_pago)}</span>
-                      <span className={`text-[11px] font-black uppercase tracking-wider ${cfg.text}`}>Falta: {formatarValor(restante)}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Pago: {formatarValor(dev.valor_pago)}
+                      </span>
+                      <span className={`text-[11px] font-black uppercase tracking-wider ${cfg.text}`}>
+                        Falta: {formatarValor(restante)}
+                      </span>
                     </div>
 
-                    {/* Área Expandida de Ações */}
                     {isOp && (
-                      <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2 animate-in fade-in slide-in-from-top-2">
-                        <button onClick={() => abrirWhatsApp(dev)} className="flex-1 bg-emerald-50 text-emerald-600 font-bold text-xs py-2.5 rounded-xl border border-emerald-200 flex items-center justify-center gap-1.5 active:scale-95 transition-transform">
+                      <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+                        <button 
+                          onClick={() => abrirWhatsApp(dev)} 
+                          className="flex-1 bg-emerald-50 text-emerald-600 font-bold text-xs py-2.5 rounded-xl border border-emerald-200 flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                        >
                           <MessageCircle size={14} /> Cobrar
                         </button>
-                        <button onClick={() => { setDevedorSelecionado(dev); setValorRecebido(restante.toString()) }} className={`flex-[1.5] text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-transform ${cfg.badge}`}>
+                        <button 
+                          onClick={() => { setDevedorSelecionado(dev); setValorRecebido(restante.toString()) }} 
+                          className={`flex-[1.5] text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-transform ${cfg.badge}`}
+                        >
                           <DollarSign size={14} /> Receber Pagamento
                         </button>
                       </div>
@@ -230,28 +241,42 @@ export default function InadimplentesTab() {
         </div>
       </div>
 
-      {/* MODAL PAYMENT SHEET (Estilo Nubank) */}
       {devedorSelecionado && (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setDevedorSelecionado(null)} />
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
+            onClick={() => setDevedorSelecionado(null)} 
+          />
           
-          <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-safe shadow-2xl animate-in slide-in-from-bottom-full duration-300">
+          <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-10 shadow-2xl">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-5 sm:hidden" />
             
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Registrar Recebimento</p>
-            <h3 className="text-2xl font-black text-slate-800 leading-none mb-1">{devedorSelecionado.nome}</h3>
-            <p className="text-sm text-slate-500 mb-6">{devedorSelecionado.descricao}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+              Registrar Recebimento
+            </p>
+            <h3 className="text-2xl font-black text-slate-800 leading-none mb-1">
+              {devedorSelecionado.nome}
+            </h3>
+            <p className="text-sm text-slate-500 mb-6">
+              {devedorSelecionado.descricao}
+            </p>
 
             <div className="flex gap-3 mb-6">
               <div className="flex-1 bg-rose-50 border border-rose-200 rounded-2xl p-3 flex flex-col">
-                <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-0.5">Dívida Total</span>
-                <span className="text-lg font-black text-rose-700">{formatarValor(devedorSelecionado.valor_total - devedorSelecionado.valor_pago)}</span>
+                <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-0.5">
+                  Dívida Total
+                </span>
+                <span className="text-lg font-black text-rose-700">
+                  {formatarValor(devedorSelecionado.valor_total - devedorSelecionado.valor_pago)}
+                </span>
               </div>
             </div>
 
             <form onSubmit={confirmarPagamento} className="flex flex-col gap-4">
               <div>
-                <label className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 block">Quanto ele pagou agora?</label>
+                <label className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 block">
+                  Quanto ele pagou agora?
+                </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R$</span>
                   <input 
@@ -267,10 +292,21 @@ export default function InadimplentesTab() {
                 </div>
               </div>
 
-              {/* Botões Rápidos */}
               <div className="flex gap-2 mb-2">
-                 <button type="button" onClick={() => setValorRecebido(((devedorSelecionado.valor_total - devedorSelecionado.valor_pago) / 2).toFixed(2))} className="flex-1 bg-slate-50 text-slate-600 font-bold text-xs py-2 rounded-xl border border-slate-200 hover:bg-slate-100">Metade (50%)</button>
-                 <button type="button" onClick={() => setValorRecebido((devedorSelecionado.valor_total - devedorSelecionado.valor_pago).toString())} className="flex-1 bg-emerald-50 text-emerald-600 font-bold text-xs py-2 rounded-xl border border-emerald-200 hover:bg-emerald-100">Quitar Tudo</button>
+                 <button 
+                    type="button" 
+                    onClick={() => setValorRecebido(((devedorSelecionado.valor_total - devedorSelecionado.valor_pago) / 2).toFixed(2))} 
+                    className="flex-1 bg-slate-50 text-slate-600 font-bold text-xs py-2 rounded-xl border border-slate-200 hover:bg-slate-100"
+                  >
+                    Metade (50%)
+                  </button>
+                 <button 
+                    type="button" 
+                    onClick={() => setValorRecebido((devedorSelecionado.valor_total - devedorSelecionado.valor_pago).toString())} 
+                    className="flex-1 bg-emerald-50 text-emerald-600 font-bold text-xs py-2 rounded-xl border border-emerald-200 hover:bg-emerald-100"
+                  >
+                    Quitar Tudo
+                  </button>
               </div>
 
               <button
@@ -278,11 +314,19 @@ export default function InadimplentesTab() {
                 disabled={processando}
                 className="w-full bg-emerald-500 text-white font-black py-4 rounded-xl text-lg mt-2 shadow-[0_4px_14px_rgba(16,185,129,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                {processando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle size={20} />}
+                {processando ? (
+                  <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <CheckCircle size={20} />
+                )}
                 {processando ? 'Confirmando...' : 'Confirmar Recebimento'}
               </button>
               
-              <button type="button" onClick={() => setDevedorSelecionado(null)} className="w-full py-2 text-sm font-bold text-slate-400 hover:text-slate-600">
+              <button 
+                type="button" 
+                onClick={() => setDevedorSelecionado(null)} 
+                className="w-full py-2 text-sm font-bold text-slate-400 hover:text-slate-600"
+              >
                 Cancelar
               </button>
             </form>
