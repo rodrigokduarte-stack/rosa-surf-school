@@ -7,15 +7,12 @@ import { RegistroAula, NovaAula, Pacote } from '@/types'
 import { hojeEmBrasilia, formatarValor } from '@/lib/dateUtils'
 import {
   PlusCircle, Clock, User, DollarSign,
-  ChevronDown, ChevronUp, CheckCircle, AlertCircle, Package, Trash2,
+  ChevronDown, ChevronUp, CheckCircle, AlertCircle, Package, Trash2, Calendar
 } from 'lucide-react'
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
 
-// Adicionamos valor_pago no FormData para o TypeScript não reclamar
 type FormData = Omit<NovaAula, 'nome_professor' | 'pacote_id'> & { valor_pago?: number }
-
-// Adicionamos valor_pago na tipagem local da Aula
 type AulaComPagamento = RegistroAula & { valor_pago?: number }
 
 export default function AulasTab() {
@@ -23,11 +20,11 @@ export default function AulasTab() {
   const [loadingAulas, setLoadingAulas] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [sucesso, setSucesso] = useState(false)
-  const [formAberto, setFormAberto] = useState(true)
   
-  // Estado para guardar a lista oficial de professores vinda do banco
+  // AQUI FOI A MUDANÇA 1: Formulário começa fechado (false)
+  const [formAberto, setFormAberto] = useState(false)
+  
   const [listaProfessores, setListaProfessores] = useState<string[]>([])
-  // Estado para guardar quais professores foram selecionados no formulário
   const [professores, setProfessores] = useState<string[]>([])
   const [professorError, setProfessorError] = useState(false)
   
@@ -45,7 +42,6 @@ export default function AulasTab() {
 
   const statusPagamento = watch('status_pagamento')
 
-  // Nova função: Busca os professores cadastrados no Supabase
   const carregarListaProfessores = useCallback(async () => {
     const { data } = await supabase
       .from('professores')
@@ -161,6 +157,7 @@ export default function AulasTab() {
       setProfessores([])
       setPacoteSelecionado('')
       carregarAulas()
+      setFormAberto(false) // Fecha o formulário automaticamente após salvar
       setTimeout(() => setSucesso(false), 3000)
     }
   }
@@ -212,23 +209,30 @@ export default function AulasTab() {
         {formAberto && (
           <form
             onSubmit={handleSubmit(onSubmit)}
-            className="px-5 pb-5 flex flex-col gap-4 border-t border-slate-100 pt-4"
+            className="px-5 pb-5 flex flex-col gap-4 border-t border-slate-100 pt-4 animate-in slide-in-from-top-2 duration-200"
           >
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
+            {/* AQUI FOI A MUDANÇA 2: Layout de Data e Horário separado e com ícones */}
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <Calendar size={14} className="text-slate-400" />
+                  Data
+                </label>
                 <input
                   type="date"
                   {...register('data_aula', { required: true })}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Horário</label>
+              <div className="flex-1">
+                <label className="text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <Clock size={14} className="text-slate-400" />
+                  Horário
+                </label>
                 <input
                   type="time"
                   {...register('horario', { required: true })}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white"
                 />
                 {errors.horario && <p className="text-red-500 text-xs mt-1">Obrigatório</p>}
               </div>
