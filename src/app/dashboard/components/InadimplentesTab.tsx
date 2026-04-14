@@ -3,250 +3,292 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { RegistroAula, Pacote } from '@/types'
-import { CheckCircle, AlertCircle, Clock, DollarSign, MessageCircle, X, Package } from 'lucide-react'
-import { formatarData, formatarValor } from '@/lib/dateUtils'
+import { formatarValor, hojeEmBrasilia } from '@/lib/dateUtils'
+import { AlertCircle, CheckCircle, MessageCircle, ChevronDown, ChevronUp, X, DollarSign, Wallet } from 'lucide-react'
 
-type AulaComPagamento = RegistroAula & { valor_pago?: number }
+// Tipo unificado para facilitar a UI
+type Devedor = {
+  id: string
+  tipo: 'aula' | 'pacote'
+  nome: string
+  descricao: string
+  telefone?: string
+  valor_total: number
+  valor_pago: number
+  dias_atraso: number
+  dados_originais: any
+}
 
-function formatarNumero(value: string): string {
-  return value.replace(/[^\d\s\-()+ ]/g, '')
+function calcularDiasAtraso(dataReferencia: string) {
+  const hoje = new Date(hojeEmBrasilia())
+  const ref = new Date(dataReferencia)
+  const diffTime = Math.abs(hoje.getTime() - ref.getTime())
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24))
+}
+
+function configUrgencia(dias: number) {
+  if (dias >= 30) return { label: "Crítico", bg: "bg-rose-50", border: "border-rose-200", badge: "bg-rose-500", text: "text-rose-700", bar: "bg-rose-500" }
+  if (dias >= 15) return { label: "Atrasado", bg: "bg-amber-50", border: "border-amber-200", badge: "bg-amber-500", text: "text-amber-700", bar: "bg-amber-500" }
+  return { label: "Recente", bg: "bg-emerald-50", border: "border-emerald-200", badge: "bg-emerald-500", text: "text-emerald-700", bar: "bg-emerald-500" }
 }
 
 export default function InadimplentesTab() {
-  const [aulas, setAulas] = useState<AulaComPagamento[]>([])
-  const [pacotes, setPacotes] = useState<Pacote[]>([])
+  const [devedores, setDevedores] = useState<Devedor[]>([])
   const [loading, setLoading] = useState(true)
-  const [liquidando, setLiquidando] = useState<string | null>(null)
+  const [expandido, setExpandido] = useState<string | null>(null)
   
-  const [cobrancaId, setCobrancaId] = useState<string | null>(null)
-  const [cobrancaTipo, setCobrancaTipo] = useState<'aula' | 'pacote' | null>(null)
-  const [numero, setNumero] = useState('')
+  // Controle do Modal de Pagamento (Payment Sheet)
+  const [devedorSelecionado, setDevedorSelecionado] = useState<Devedor | null>(null)
+  const [valorRecebido, setValorRecebido] = useState<string>('')
+  const [processando, setProcessando] = useState(false)
 
   const carregarInadimplentes = useCallback(async () => {
     setLoading(true)
     
+    // Busca Aulas Pendentes/Parciais
     const { data: aulasData } = await supabase
       .from('registro_aulas')
       .select('*')
       .in('status_pagamento', ['Pendente', 'Parcial'])
-      .order('data_aula', { ascending: false })
-      .order('horario', { ascending: true })
     
+    // Busca Pacotes Devendo
     const { data: pacotesData } = await supabase
       .from('pacotes')
       .select('*')
-      .order('created_at', { ascending: false })
 
-    const pacotesDevedores = (pacotesData ?? []).filter(p => Number(p.valor_pago) < Number(p.valor_total))
+    const lista: Devedor[] = []
 
-    setAulas(aulasData ?? [])
-    setPacotes(pacotesDevedores)
+    aulasData?.forEach((a: RegistroAula & { valor_pago?: number }) => {
+      lista.push({
+        id: `aula-${a.id}`,
+        tipo: 'aula',
+        nome: a.nome_cliente,
+        descricao: `${a.modalidade} (${a.data_aula})`,
+        valor_total: Number(a.valor_aula),
+        valor_pago: Number(a.valor_pago || 0),
+        dias_atraso: calcularDiasAtraso(a.data_aula),
+        dados_originais: a
+      })
+    })
+
+    pacotesData?.forEach((p: Pacote) => {
+      if (Number(p.valor_pago) < Number(p.valor_total)) {
+        lista.push({
+          id: `pacote-${p.id}`,
+          tipo: 'pacote',
+          nome: p.nome_cliente,
+          descricao: `Pacote (${p.aulas_restantes} restantes)`,
+          telefone: p.telefone,
+          valor_total: Number(p.valor_total),
+          valor_pago: Number(p.valor_pago || 0),
+          dias_atraso: calcularDiasAtraso(p.created_at.split('T')[0]),
+          dados_originais: p
+        })
+      }
+    })
+
+    // Ordena pelos mais atrasados
+    lista.sort((a, b) => b.dias_atraso - a.dias_atraso)
+    setDevedores(lista)
     setLoading(false)
   }, [])
 
   useEffect(() => { carregarInadimplentes() }, [carregarInadimplentes])
 
-  async function liquidarAula(aula: AulaComPagamento) {
-    setLiquidando(aula.id)
-    const { error } = await supabase
-      .from('registro_aulas')
-      .update({ 
-        status_pagamento: 'Pago',
-        valor_pago: aula.valor_aula
-      })
-      .eq('id', aula.id)
+  // Lógica pesada de pagamento parcial
+  async function confirmarPagamento(e: React.FormEvent) {
+    e.preventDefault()
+    if (!devedorSelecionado || !valorRecebido) return
     
-    setLiquidando(null)
-    if (!error) setAulas(prev => prev.filter(a => a.id !== aula.id))
+    setProcessando(true)
+    const valorAdicional = parseFloat(valorRecebido)
+    const novoValorPago = devedorSelecionado.valor_pago + valorAdicional
+    const quitou = novoValorPago >= devedorSelecionado.valor_total
+
+    if (devedorSelecionado.tipo === 'aula') {
+      await supabase.from('registro_aulas').update({ 
+        status_pagamento: quitou ? 'Pago' : 'Parcial',
+        valor_pago: quitou ? devedorSelecionado.valor_total : novoValorPago
+      }).eq('id', devedorSelecionado.dados_originais.id)
+    } else {
+      await supabase.from('pacotes').update({ 
+        valor_pago: quitou ? devedorSelecionado.valor_total : novoValorPago
+      }).eq('id', devedorSelecionado.dados_originais.id)
+    }
+
+    setProcessando(false)
+    setDevedorSelecionado(null)
+    setValorRecebido('')
+    carregarInadimplentes()
   }
 
-  async function liquidarPacote(pacote: Pacote) {
-    setLiquidando(pacote.id)
-    const { error } = await supabase
-      .from('pacotes')
-      .update({ 
-        valor_pago: pacote.valor_total
-      })
-      .eq('id', pacote.id)
-    
-    setLiquidando(null)
-    if (!error) setPacotes(prev => prev.filter(p => p.id !== pacote.id))
+  function abrirWhatsApp(d: Devedor) {
+    const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}). Podemos acertar? 🏄‍♂️`)
+    const fone = d.telefone?.replace(/\D/g, '') || ''
+    if(fone) window.open(`https://wa.me/55${fone}?text=${texto}`, '_blank')
+    else alert("Cliente sem telefone salvo no cadastro do pacote.")
   }
 
-  function abrirCobranca(id: string, tipo: 'aula' | 'pacote') {
-    setCobrancaId(id)
-    setCobrancaTipo(tipo)
-    setNumero('')
-  }
-
-  function fecharCobranca() {
-    setCobrancaId(null)
-    setCobrancaTipo(null)
-    setNumero('')
-  }
-
-  function enviarWhatsAppAula(aula: AulaComPagamento) {
-    const digits = numero.replace(/\D/g, '')
-    if (digits.length < 7) return
-    const data = formatarData(aula.data_aula)
-    const valorDevido = Number(aula.valor_aula) - Number(aula.valor_pago || 0)
-    const texto = encodeURIComponent(`Olá! Passando para lembrar o pagamento pendente da aula de surf do dia ${data}, no valor de ${formatarValor(valorDevido)}. Podemos acertar?`)
-    window.open(`https://wa.me/${digits}?text=${texto}`, '_blank')
-    fecharCobranca()
-  }
-
-  function enviarWhatsAppPacote(pacote: Pacote) {
-    const digits = numero.replace(/\D/g, '')
-    if (digits.length < 7) return
-    const valorDevido = Number(pacote.valor_total) - Number(pacote.valor_pago || 0)
-    const texto = encodeURIComponent(`Olá, ${pacote.nome_cliente}! Passando para lembrar a parcela pendente do seu pacote de surf, no valor de ${formatarValor(valorDevido)}. Podemos acertar?`)
-    window.open(`https://wa.me/${digits}?text=${texto}`, '_blank')
-    fecharCobranca()
-  }
-
-  const dividaAulas = aulas.reduce((s, a) => s + Math.max(0, Number(a.valor_aula) - Number(a.valor_pago || 0)), 0)
-  const dividaPacotes = pacotes.reduce((s, p) => s + Math.max(0, Number(p.valor_total) - Number(p.valor_pago || 0)), 0)
-  const totalPendente = dividaAulas + dividaPacotes
+  const totalEmAberto = devedores.reduce((s, d) => s + (d.valor_total - d.valor_pago), 0)
+  const criticos = devedores.filter(d => d.dias_atraso >= 30).length
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-5 flex flex-col gap-5">
-      <div className="flex items-center gap-2">
-        <AlertCircle size={20} className="text-red-500" />
-        <h2 className="text-lg font-bold text-slate-800">Inadimplentes</h2>
+    <>
+      <div className="px-4 py-2 flex flex-col gap-6">
+
+        {/* Faixa de KPIs (Resumo Nubank Style) */}
+        <div className="flex gap-3 -mt-6">
+          <div className="flex-[1.2] bg-gradient-to-br from-rose-500 to-red-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(225,29,72,0.3)] relative overflow-hidden">
+            <span className="text-[26px] font-black text-white leading-tight mt-1">{formatarValor(totalEmAberto)}</span>
+            <span className="text-[11px] font-medium text-white/80 mt-1">Total na rua</span>
+            <Wallet size={80} className="absolute -bottom-4 -right-4 text-white opacity-10" />
+          </div>
+          
+          <div className="flex-1 flex flex-col gap-2.5">
+            <div className="flex-1 bg-white rounded-[16px] p-3 shadow-sm flex flex-col justify-center border border-rose-100">
+              <span className="text-[18px] font-bold text-rose-600 leading-tight">{criticos}</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Críticos (+30d)</span>
+            </div>
+            <div className="flex-1 bg-white rounded-[16px] p-3 shadow-sm flex flex-col justify-center border border-slate-100">
+              <span className="text-[18px] font-bold text-slate-800 leading-tight">{devedores.length}</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Inadimplentes</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Lista de Cards Premium */}
+        <div>
+          <h2 className="text-[15px] font-bold text-slate-800 flex items-center gap-2 mb-4">
+            <span className="w-2 h-2 rounded-full bg-rose-500" /> Cobranças Ativas
+          </h2>
+
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <div className="w-7 h-7 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : devedores.length === 0 ? (
+            <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
+              <span className="text-4xl mb-3 block">🙌</span>
+              <p className="text-slate-500 font-medium text-sm">Ninguém devendo!</p>
+              <p className="text-slate-400 text-xs mt-1">O caixa está 100% em dia.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {devedores.map(dev => {
+                const cfg = configUrgencia(dev.dias_atraso)
+                const restante = dev.valor_total - dev.valor_pago
+                const pctPago = Math.round((dev.valor_pago / dev.valor_total) * 100)
+                const isOp = expandido === dev.id
+
+                return (
+                  <div key={dev.id} className={`bg-white rounded-[20px] p-4 border shadow-sm transition-all ${cfg.border}`}>
+                    
+                    {/* Header do Card */}
+                    <div className="flex items-start justify-between cursor-pointer" onClick={() => setExpandido(isOp ? null : dev.id)}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${cfg.badge}`}>
+                          {dev.nome.substring(0,2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-800 text-[15px] leading-tight">{dev.nome}</span>
+                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full text-white tracking-wider ${cfg.badge}`}>
+                              {dev.dias_atraso}d • {cfg.label}
+                            </span>
+                          </div>
+                          <span className="text-xs text-slate-500 mt-0.5 block">{dev.descricao}</span>
+                        </div>
+                      </div>
+                      {isOp ? <ChevronUp size={16} className="text-slate-400 mt-1" /> : <ChevronDown size={16} className="text-slate-400 mt-1" />}
+                    </div>
+
+                    {/* Barra de Progresso */}
+                    <div className="mt-4 mb-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-500 ${cfg.bar}`} style={{ width: `${pctPago}%` }} />
+                    </div>
+                    <div className="flex justify-between items-center mt-1.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pago: {formatarValor(dev.valor_pago)}</span>
+                      <span className={`text-[11px] font-black uppercase tracking-wider ${cfg.text}`}>Falta: {formatarValor(restante)}</span>
+                    </div>
+
+                    {/* Área Expandida de Ações */}
+                    {isOp && (
+                      <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2 animate-in fade-in slide-in-from-top-2">
+                        <button onClick={() => abrirWhatsApp(dev)} className="flex-1 bg-emerald-50 text-emerald-600 font-bold text-xs py-2.5 rounded-xl border border-emerald-200 flex items-center justify-center gap-1.5 active:scale-95 transition-transform">
+                          <MessageCircle size={14} /> Cobrar
+                        </button>
+                        <button onClick={() => { setDevedorSelecionado(dev); setValorRecebido(restante.toString()) }} className={`flex-[1.5] text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-transform ${cfg.badge}`}>
+                          <DollarSign size={14} /> Receber Pagamento
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="w-7 h-7 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : aulas.length === 0 && pacotes.length === 0 ? (
-        <div className="bg-white rounded-2xl p-10 shadow-sm text-center">
-          <CheckCircle size={44} className="mx-auto mb-3 text-emerald-400" />
-          <p className="font-semibold text-slate-700 text-lg">Tudo em dia!</p>
-          <p className="text-sm text-slate-400 mt-1">Nenhum pagamento pendente no caixa.</p>
-        </div>
-      ) : (
-        <>
-          <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <DollarSign size={16} className="text-red-600" />
-              <span className="text-sm font-medium text-red-700">Total na rua</span>
+      {/* MODAL PAYMENT SHEET (Estilo Nubank) */}
+      {devedorSelecionado && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setDevedorSelecionado(null)} />
+          
+          <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-safe shadow-2xl animate-in slide-in-from-bottom-full duration-300">
+            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-5 sm:hidden" />
+            
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Registrar Recebimento</p>
+            <h3 className="text-2xl font-black text-slate-800 leading-none mb-1">{devedorSelecionado.nome}</h3>
+            <p className="text-sm text-slate-500 mb-6">{devedorSelecionado.descricao}</p>
+
+            <div className="flex gap-3 mb-6">
+              <div className="flex-1 bg-rose-50 border border-rose-200 rounded-2xl p-3 flex flex-col">
+                <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-0.5">Dívida Total</span>
+                <span className="text-lg font-black text-rose-700">{formatarValor(devedorSelecionado.valor_total - devedorSelecionado.valor_pago)}</span>
+              </div>
             </div>
-            <span className="font-bold text-red-700 text-lg">{formatarValor(totalPendente)}</span>
+
+            <form onSubmit={confirmarPagamento} className="flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 block">Quanto ele pagou agora?</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R$</span>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    min="0.01"
+                    max={devedorSelecionado.valor_total - devedorSelecionado.valor_pago}
+                    value={valorRecebido}
+                    onChange={e => setValorRecebido(e.target.value)}
+                    required
+                    className="w-full bg-emerald-50/50 border-2 border-emerald-100 rounded-2xl pl-10 pr-4 py-4 text-2xl font-black text-emerald-700 focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Botões Rápidos */}
+              <div className="flex gap-2 mb-2">
+                 <button type="button" onClick={() => setValorRecebido(((devedorSelecionado.valor_total - devedorSelecionado.valor_pago) / 2).toFixed(2))} className="flex-1 bg-slate-50 text-slate-600 font-bold text-xs py-2 rounded-xl border border-slate-200 hover:bg-slate-100">Metade (50%)</button>
+                 <button type="button" onClick={() => setValorRecebido((devedorSelecionado.valor_total - devedorSelecionado.valor_pago).toString())} className="flex-1 bg-emerald-50 text-emerald-600 font-bold text-xs py-2 rounded-xl border border-emerald-200 hover:bg-emerald-100">Quitar Tudo</button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={processando}
+                className="w-full bg-emerald-500 text-white font-black py-4 rounded-xl text-lg mt-2 shadow-[0_4px_14px_rgba(16,185,129,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {processando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle size={20} />}
+                {processando ? 'Confirmando...' : 'Confirmar Recebimento'}
+              </button>
+              
+              <button type="button" onClick={() => setDevedorSelecionado(null)} className="w-full py-2 text-sm font-bold text-slate-400 hover:text-slate-600">
+                Cancelar
+              </button>
+            </form>
           </div>
-
-          {pacotes.length > 0 && (
-            <div className="flex flex-col gap-3">
-              <h3 className="text-sm font-bold text-slate-500 flex items-center gap-1.5 mt-2 ml-1">
-                <Package size={14} /> Pacotes Pendentes
-              </h3>
-              {pacotes.map(pacote => {
-                const devido = Math.max(0, Number(pacote.valor_total) - Number(pacote.valor_pago || 0))
-                return (
-                  <div key={pacote.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <span className="font-semibold text-slate-800">{pacote.nome_cliente}</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 uppercase tracking-wider">
-                            Pacote
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500">Total: {formatarValor(Number(pacote.valor_total))}</p>
-                        {Number(pacote.valor_pago) > 0 && (
-                          <p className="text-xs text-slate-400">Pago: {formatarValor(Number(pacote.valor_pago))}</p>
-                        )}
-                      </div>
-                      <div className="flex flex-col items-end gap-2 shrink-0">
-                        <div className="text-right">
-                          <span className="text-xs text-red-500 font-medium block -mb-1">Falta pagar</span>
-                          <span className="font-bold text-slate-800 text-base">{formatarValor(devido)}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => abrirCobranca(pacote.id, 'pacote')} className="p-1.5 text-slate-300 hover:text-[#25D366] hover:bg-green-50 rounded-xl transition-colors">
-                            <MessageCircle size={15} />
-                          </button>
-                          <button onClick={() => liquidarPacote(pacote)} disabled={liquidando === pacote.id} className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 px-4 py-2 rounded-xl transition-colors disabled:opacity-60 flex items-center gap-1">
-                            {liquidando === pacote.id ? <span className="w-3 h-3 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" /> : <CheckCircle size={13} />}
-                            {liquidando === pacote.id ? '' : 'Quitar'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    {cobrancaId === pacote.id && cobrancaTipo === 'pacote' && (
-                      <div className="mt-3 pt-3 border-t border-slate-100">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-semibold text-slate-600">WhatsApp do Cliente</p>
-                          <button onClick={fecharCobranca} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
-                        </div>
-                        <input type="tel" value={numero} onChange={e => setNumero(formatarNumero(e.target.value))} placeholder="+55 11 99999-9999" className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-                        <button onClick={() => enviarWhatsAppPacote(pacote)} disabled={numero.replace(/\D/g, '').length < 7} className="mt-2 w-full bg-[#25D366] hover:bg-[#1ebe5c] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                          <MessageCircle size={15} /> Abrir WhatsApp
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {aulas.length > 0 && (
-            <div className="flex flex-col gap-3">
-              <h3 className="text-sm font-bold text-slate-500 flex items-center gap-1.5 mt-2 ml-1">
-                <Clock size={14} /> Aulas Pendentes
-              </h3>
-              {aulas.map(aula => {
-                const devido = Math.max(0, Number(aula.valor_aula) - Number(aula.valor_pago || 0))
-                return (
-                  <div key={aula.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-2">
-                          <span className="font-semibold text-slate-800">{aula.nome_cliente}</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${aula.modalidade === 'Aula Particular' ? 'bg-pink-100 text-pink-700' : 'bg-violet-100 text-violet-700'}`}>{aula.modalidade}</span>
-                          {aula.status_pagamento === 'Parcial' && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 uppercase tracking-wider">Parcial</span>}
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
-                          <span className="flex items-center gap-1"><Clock size={11} />{formatarData(aula.data_aula)} · {aula.horario}</span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-2 shrink-0">
-                        <div className="text-right">
-                          <span className="text-xs text-red-500 font-medium block -mb-1">{aula.status_pagamento === 'Parcial' ? 'Falta pagar' : 'Pendente'}</span>
-                          <span className="font-bold text-slate-800 text-base">{formatarValor(devido)}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => abrirCobranca(aula.id, 'aula')} className="p-1.5 text-slate-300 hover:text-[#25D366] hover:bg-green-50 rounded-xl transition-colors">
-                            <MessageCircle size={15} />
-                          </button>
-                          <button onClick={() => liquidarAula(aula)} disabled={liquidando === aula.id} className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 px-4 py-2 rounded-xl transition-colors disabled:opacity-60 flex items-center gap-1">
-                            {liquidando === aula.id ? <span className="w-3 h-3 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" /> : <CheckCircle size={13} />}
-                            {liquidando === aula.id ? '' : 'Quitar'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    {cobrancaId === aula.id && cobrancaTipo === 'aula' && (
-                      <div className="mt-3 pt-3 border-t border-slate-100">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-semibold text-slate-600">WhatsApp do Cliente</p>
-                          <button onClick={fecharCobranca} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
-                        </div>
-                        <input type="tel" value={numero} onChange={e => setNumero(formatarNumero(e.target.value))} placeholder="+55 11 99999-9999" className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-                        <button onClick={() => enviarWhatsAppAula(aula)} disabled={numero.replace(/\D/g, '').length < 7} className="mt-2 w-full bg-[#25D366] hover:bg-[#1ebe5c] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                          <MessageCircle size={15} /> Abrir WhatsApp
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </>
+        </div>
       )}
-      <div className="h-4" />
-    </div>
+    </>
   )
 }
