@@ -1,314 +1,187 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Periodo, formatarValor, parseProfessores, getRange } from '@/lib/dateUtils'
-import { TrendingUp, TrendingDown, DollarSign, Clock, Users, BarChart2, RefreshCw, GraduationCap, Package, Tag } from 'lucide-react'
-import AcertoProfessores from './AcertoProfessores'
-
-interface DadosFinanceiros {
-  totalEmCaixa: number
-  totalAReceber: number
-  custoProfessores: number
-  custosOperacionais: number
-  totalAulas: number
-  receitaPacotes: number
-  inadimplenciaPacotes: number
-  aulasARealizar: number
-}
-
-const PERIODOS: { id: Periodo; label: string }[] = [
-  { id: 'hoje', label: 'Hoje' },
-  { id: 'semana', label: 'Semana' },
-  { id: 'mes', label: 'Mês' },
-  { id: 'tudo', label: 'Tudo' },
-]
-
-const DADOS_VAZIOS: DadosFinanceiros = {
-  totalEmCaixa: 0, totalAReceber: 0,
-  custoProfessores: 0, custosOperacionais: 0, totalAulas: 0,
-  receitaPacotes: 0, inadimplenciaPacotes: 0, aulasARealizar: 0,
-}
+import { formatarValor } from '@/lib/dateUtils'
+import { Eye, EyeOff, TrendingUp, TrendingDown, Wallet, Activity, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 
 export default function FinanceiroTab() {
-  const [periodo, setPeriodo] = useState<Periodo>('mes')
-  const [dados, setDados] = useState<DadosFinanceiros>(DADOS_VAZIOS)
-  const [breakdownCategorias, setBreakdownCategorias] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
+  const [mostrarValores, setMostrarValores] = useState(true)
+  
+  const [receitas, setReceitas] = useState(0)
+  const [despesas, setDespesas] = useState(0)
 
-  async function fetchDados(p: Periodo) {
+  // Nomes dos meses para o Header
+  const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+  const mesAtual = meses[new Date().getMonth()]
+
+  const carregarDadosDoMes = useCallback(async () => {
     setLoading(true)
-    const { inicio, fim } = getRange(p)
+    
+    // Pega o primeiro e o último dia do mês atual
+    const hoje = new Date()
+    const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0]
+    const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0]
 
-    // Adicionamos o valor_pago na busca de aulas para o cálculo exato
-    let aulasQ = supabase
+    // 1. Busca Receitas (Aulas)
+    const { data: aulas } = await supabase
       .from('registro_aulas')
-      .select('valor_aula, valor_pago, status_pagamento, nome_professor')
-    if (inicio) aulasQ = aulasQ.gte('data_aula', inicio)
-    if (fim) aulasQ = aulasQ.lte('data_aula', fim)
+      .select('valor_aula, valor_pago, status_pagamento')
+      .gte('data_aula', primeiroDia)
+      .lte('data_aula', ultimoDia)
 
-    let custosQ = supabase.from('registro_custos').select('valor_custo, categoria')
-    if (inicio) custosQ = custosQ.gte('data_custo', inicio)
-    if (fim) custosQ = custosQ.lte('data_custo', fim)
-
-    const pacotesQ = supabase.from('pacotes').select('valor_total, valor_pago, aulas_restantes')
-
-    const [{ data: aulas }, { data: custos }, { data: pacotes }] = await Promise.all([aulasQ, custosQ, pacotesQ])
-
-    const aulasList = aulas ?? []
-    const custosList = custos ?? []
-    const pacotesList = pacotes ?? []
-
-    // Agrupamento de categorias de custos
-    setBreakdownCategorias(
-      custosList.reduce((acc, c) => {
-        const cat = (c.categoria as string) || 'Outros'
-        acc[cat] = (acc[cat] ?? 0) + Number(c.valor_custo)
-        return acc
-      }, {} as Record<string, number>)
-    )
-
-    // 1. Cálculos de Aulas Avulsas
-    const recebidoAulas = aulasList.reduce((s, a) => {
-      if (a.status_pagamento === 'Pago') return s + Number(a.valor_aula)
-      if (a.status_pagamento === 'Parcial') return s + Number(a.valor_pago || 0)
-      return s
-    }, 0)
-
-    const aReceberAulas = aulasList.reduce((s, a) => {
-      if (a.status_pagamento === 'Pendente') return s + Number(a.valor_aula)
-      if (a.status_pagamento === 'Parcial') return s + Math.max(0, Number(a.valor_aula) - Number(a.valor_pago || 0))
-      return s
-    }, 0)
-
-    // 2. Cálculos de Pacotes
-    const recebidoPacotes = pacotesList.reduce((s, p) => s + Number(p.valor_pago), 0)
-    const aReceberPacotes = pacotesList.reduce((s, p) => s + Math.max(0, Number(p.valor_total) - Number(p.valor_pago)), 0)
-
-    // 3. Custos
-    const custoProfs = aulasList.reduce((s, a) => {
-      const n = parseProfessores(a.nome_professor).length || 1
-      return s + 100 * n
-    }, 0)
-    const despesas = custosList.reduce((s, c) => s + Number(c.valor_custo), 0)
-
-    setDados({
-      totalEmCaixa: recebidoAulas + recebidoPacotes,
-      totalAReceber: aReceberAulas + aReceberPacotes,
-      custoProfessores: custoProfs,
-      custosOperacionais: despesas,
-      totalAulas: aulasList.length,
-      receitaPacotes: recebidoPacotes,
-      inadimplenciaPacotes: aReceberPacotes,
-      aulasARealizar: pacotesList.reduce((s, p) => s + Number(p.aulas_restantes), 0),
+    let totalReceitas = 0
+    aulas?.forEach(a => {
+      if (a.status_pagamento === 'Pago') totalReceitas += Number(a.valor_aula)
+      if (a.status_pagamento === 'Parcial') totalReceitas += Number(a.valor_pago || 0)
     })
 
+    // 2. Busca Receitas (Pacotes) - Baseado na data de criação
+    const { data: pacotes } = await supabase
+      .from('pacotes')
+      .select('valor_pago')
+      .gte('created_at', `${primeiroDia}T00:00:00.000Z`)
+      .lte('created_at', `${ultimoDia}T23:59:59.999Z`)
+
+    pacotes?.forEach(p => {
+      totalReceitas += Number(p.valor_pago || 0)
+    })
+
+    // 3. Busca Despesas
+    const { data: custos } = await supabase
+      .from('registro_custos')
+      .select('valor_custo')
+      .gte('data_custo', primeiroDia)
+      .lte('data_custo', ultimoDia)
+
+    let totalDespesas = 0
+    custos?.forEach(c => {
+      totalDespesas += Number(c.valor_custo)
+    })
+
+    setReceitas(totalReceitas)
+    setDespesas(totalDespesas)
     setLoading(false)
-  }
+  }, [])
 
-  useEffect(() => { fetchDados(periodo) }, [periodo])
+  useEffect(() => { carregarDadosDoMes() }, [carregarDadosDoMes])
 
-  // Lucro baseado em dinheiro real no caixa (Total Em Caixa - Custos)
-  const lucroLiquido = dados.totalEmCaixa - dados.custoProfessores - dados.custosOperacionais
-  const labelPeriodo = PERIODOS.find(p => p.id === periodo)?.label ?? ''
+  const lucroLiquido = receitas - despesas
+  const margem = receitas > 0 ? Math.round((lucroLiquido / receitas) * 100) : 0
+  
+  // Cálculo para a barra visual de proporção (Saúde Financeira)
+  const totalMovimentado = receitas + despesas
+  const pctReceita = totalMovimentado > 0 ? (receitas / totalMovimentado) * 100 : 50
+  const pctDespesa = totalMovimentado > 0 ? (despesas / totalMovimentado) * 100 : 50
+
+  const esconder = (valor: string) => mostrarValores ? valor : 'R$ •••••'
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-5 flex flex-col gap-5">
+    <div className="px-4 py-2 flex flex-col gap-6">
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <BarChart2 size={20} className="text-pink-600" />
-          <h2 className="text-lg font-bold text-slate-800">Dashboard Financeiro</h2>
+      {/* HEADER DA ABA */}
+      <div className="flex items-center justify-between -mt-2">
+        <div>
+          <h2 className="text-lg font-black text-slate-800 tracking-tight">Dashboard</h2>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Visão Geral • {mesAtual}</p>
         </div>
-        <button
-          onClick={() => fetchDados(periodo)}
-          className="p-2 rounded-xl text-slate-400 hover:text-pink-600 hover:bg-pink-50 transition-colors"
-          title="Atualizar"
+        <button 
+          onClick={() => setMostrarValores(!mostrarValores)}
+          className="w-10 h-10 bg-white rounded-full shadow-sm border border-slate-100 flex items-center justify-center text-slate-400 hover:text-pink-600 hover:bg-pink-50 transition-colors"
         >
-          <RefreshCw size={16} />
+          {mostrarValores ? <Eye size={18} /> : <EyeOff size={18} />}
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl p-1.5 shadow-sm flex gap-1">
-        {PERIODOS.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setPeriodo(id)}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              periodo === id
-                ? 'bg-pink-600 text-white shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <div className="w-9 h-9 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-slate-400">Calculando...</p>
+        <div className="flex justify-center py-20">
+          <div className="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <>
+          {/* CARD PRINCIPAL (NUBANK STYLE) */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-[24px] p-6 shadow-xl relative overflow-hidden">
+            {/* Efeito de ruído/textura sutil no fundo */}
+            <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/stardust.png")' }} />
+            
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 mb-4">
+                <Wallet size={16} className="text-slate-400" />
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Lucro Líquido do Mês</span>
+              </div>
+              
+              <div className="flex items-end gap-3 mb-2">
+                <span className={`text-4xl font-black tracking-tighter ${lucroLiquido >= 0 ? 'text-white' : 'text-rose-400'}`}>
+                  {esconder(formatarValor(lucroLiquido))}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2 mt-4">
+                <div className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${lucroLiquido >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                  <Activity size={12} />
+                  {margem}% Margem
+                </div>
+                <span className="text-xs font-medium text-slate-500">sobre o faturamento</span>
+              </div>
+            </div>
+          </div>
 
-          {dados.totalAulas > 0 && (
-            <p className="text-xs text-slate-400 text-center -mb-1">
-              Baseado em{' '}
-              <span className="font-semibold text-slate-600">
-                {dados.totalAulas} aula{dados.totalAulas !== 1 ? 's' : ''}
-              </span>{' '}
-              no período
-            </p>
-          )}
-
-          {/* Métrica Global Unificada (Aulas + Pacotes) */}
+          {/* CARDS DE ENTRADA E SAÍDA */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-emerald-600 rounded-2xl p-4 shadow-sm text-white">
-              <div className="flex items-center gap-1.5 mb-3">
-                <div className="bg-white/20 p-1.5 rounded-lg"><DollarSign size={14} /></div>
-                <span className="text-xs font-semibold opacity-90">Em Caixa</span>
+            {/* Card Entradas */}
+            <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+              <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center mb-3">
+                <ArrowUpRight size={16} className="text-emerald-600" />
               </div>
-              <p className="text-2xl font-bold leading-tight">{formatarValor(dados.totalEmCaixa)}</p>
-              <p className="text-[10px] opacity-75 mt-1">Aulas e Pacotes recebidos</p>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Entradas</span>
+              <span className="text-xl font-black text-slate-800 tracking-tight">
+                {esconder(formatarValor(receitas))}
+              </span>
             </div>
-            <div className="bg-amber-500 rounded-2xl p-4 shadow-sm text-white">
-              <div className="flex items-center gap-1.5 mb-3">
-                <div className="bg-white/20 p-1.5 rounded-lg"><Clock size={14} /></div>
-                <span className="text-xs font-semibold opacity-90">A Receber</span>
+
+            {/* Card Saídas */}
+            <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+              <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center mb-3">
+                <ArrowDownRight size={16} className="text-rose-600" />
               </div>
-              <p className="text-2xl font-bold leading-tight">{formatarValor(dados.totalAReceber)}</p>
-              <p className="text-[10px] opacity-75 mt-1">Dívidas totais na rua</p>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Saídas</span>
+              <span className="text-xl font-black text-slate-800 tracking-tight">
+                {esconder(formatarValor(despesas))}
+              </span>
             </div>
           </div>
 
-          {/* Custos */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-              <div className="flex items-center gap-1.5 mb-3">
-                <div className="bg-slate-100 p-1.5 rounded-lg">
-                  <Users size={14} className="text-slate-600" />
+          {/* GRÁFICO DE SAÚDE FINANCEIRA */}
+          <div className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+            <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-4">
+              <span className="w-2 h-2 rounded-full bg-pink-500" /> Saúde Financeira
+            </h3>
+            
+            {totalMovimentado === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-4 font-medium italic">Nenhuma movimentação neste mês.</p>
+            ) : (
+              <div className="space-y-4">
+                {/* Barra de Proporção */}
+                <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                  <div className="h-full bg-emerald-500 transition-all duration-1000" style={{ width: `${pctReceita}%` }} />
+                  <div className="h-full bg-rose-500 transition-all duration-1000" style={{ width: `${pctDespesa}%` }} />
                 </div>
-                <span className="text-xs font-semibold text-slate-500">Custo Professores</span>
-              </div>
-              <p className="text-2xl font-bold text-slate-800 leading-tight">{formatarValor(dados.custoProfessores)}</p>
-              <p className="text-xs text-slate-400 mt-1.5">R$100 / prof. por aula</p>
-            </div>
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-              <div className="flex items-center gap-1.5 mb-3">
-                <div className="bg-slate-100 p-1.5 rounded-lg">
-                  <TrendingDown size={14} className="text-slate-600" />
+                
+                {/* Legendas da Barra */}
+                <div className="flex justify-between items-center text-xs font-bold">
+                  <div className="flex items-center gap-1.5 text-emerald-600">
+                    <TrendingUp size={14} /> {Math.round(pctReceita)}% Receita
+                  </div>
+                  <div className="flex items-center gap-1.5 text-rose-600">
+                    {Math.round(pctDespesa)}% Custo <TrendingDown size={14} />
+                  </div>
                 </div>
-                <span className="text-xs font-semibold text-slate-500">Custos Operacionais</span>
               </div>
-              <p className="text-2xl font-bold text-slate-800 leading-tight">{formatarValor(dados.custosOperacionais)}</p>
-              <p className="text-xs text-slate-400 mt-1.5">Despesas do período</p>
-            </div>
+            )}
           </div>
-
-          {/* Lucro Líquido */}
-          <div className={`rounded-2xl p-5 shadow-md text-white ${
-            lucroLiquido >= 0
-              ? 'bg-gradient-to-br from-pink-700 via-pink-600 to-pink-500'
-              : 'bg-gradient-to-br from-red-700 via-red-600 to-red-500'
-          }`}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="bg-white/20 p-2 rounded-xl">
-                  {lucroLiquido >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-                </div>
-                <span className="font-bold text-base">Lucro Líquido Real</span>
-              </div>
-              <span className="text-xs bg-white/20 px-3 py-1 rounded-full font-medium">{labelPeriodo}</span>
-            </div>
-            <p className="text-4xl font-bold mb-3">{formatarValor(lucroLiquido)}</p>
-            <div className="border-t border-white/20 pt-3 flex flex-col gap-1">
-              <div className="flex justify-between text-xs opacity-75">
-                <span>Dinheiro em Caixa</span><span>{formatarValor(dados.totalEmCaixa)}</span>
-              </div>
-              <div className="flex justify-between text-xs opacity-75">
-                <span>− Custo Professores</span><span>{formatarValor(dados.custoProfessores)}</span>
-              </div>
-              <div className="flex justify-between text-xs opacity-75">
-                <span>− Custos Operacionais</span><span>{formatarValor(dados.custosOperacionais)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Resumo Específico de Pacotes */}
-          <div>
-            <div className="flex items-center gap-2 mb-3 px-1">
-              <Package size={17} className="text-pink-600" />
-              <h3 className="text-base font-bold text-slate-800">Detalhe de Pacotes</h3>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 text-center">
-                <p className="text-xs font-semibold text-slate-500 mb-1">Receita</p>
-                <p className="text-base font-bold text-emerald-600">{formatarValor(dados.receitaPacotes)}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">já pago</p>
-              </div>
-              <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 text-center">
-                <p className="text-xs font-semibold text-slate-500 mb-1">Dívidas</p>
-                <p className="text-base font-bold text-amber-600">{formatarValor(dados.inadimplenciaPacotes)}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">a receber</p>
-              </div>
-              <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 text-center">
-                <p className="text-xs font-semibold text-slate-500 mb-1">Aulas</p>
-                <p className="text-base font-bold text-slate-700">{dados.aulasARealizar}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">a entregar</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Despesas por Categoria */}
-          {Object.keys(breakdownCategorias).length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <Tag size={17} className="text-pink-600" />
-                <h3 className="text-base font-bold text-slate-800">Despesas por Categoria</h3>
-              </div>
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                {Object.entries(breakdownCategorias)
-                  .sort(([, a], [, b]) => b - a)
-                  .map(([cat, total], i, arr) => {
-                    const max = arr[0][1]
-                    const pct = max > 0 ? (total / max) * 100 : 0
-                    return (
-                      <div
-                        key={cat}
-                        className={`px-4 py-3 ${i < arr.length - 1 ? 'border-b border-slate-100' : ''}`}
-                      >
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-sm font-medium text-slate-700">{cat}</span>
-                          <span className="text-sm font-bold text-slate-800">{formatarValor(total)}</span>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-1.5">
-                          <div
-                            className="bg-pink-400 h-1.5 rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-              </div>
-            </div>
-          )}
-
-          {/* Acerto com Professores */}
-          <div>
-            <div className="flex items-center gap-2 mb-3 px-1">
-              <GraduationCap size={17} className="text-pink-600" />
-              <h3 className="text-base font-bold text-slate-800">Acerto com Professores</h3>
-            </div>
-            <AcertoProfessores periodo={periodo} />
-          </div>
-
-        </div>
+        </>
       )}
-
-      <div className="h-4" />
     </div>
   )
 }
