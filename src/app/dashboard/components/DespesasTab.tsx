@@ -23,7 +23,10 @@ export default function DespesasTab() {
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [sucesso, setSucesso] = useState(false)
-  const [formAberto, setFormAberto] = useState(true)
+  
+  // AQUI FOI A MUDANÇA 1: O formulário começa fechado (false)
+  const [formAberto, setFormAberto] = useState(false)
+  
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<NovoCusto>({
@@ -51,6 +54,7 @@ export default function DespesasTab() {
       setSucesso(true)
       reset({ data_custo: hojeEmBrasilia(), categoria: 'Equipamentos', descricao: '', valor_custo: undefined })
       carregarCustos()
+      setFormAberto(false) // AQUI FOI A MUDANÇA 2: Fecha sozinho após salvar
       setTimeout(() => setSucesso(false), 3000)
     }
   }
@@ -86,7 +90,8 @@ export default function DespesasTab() {
         {formAberto && (
           <form
             onSubmit={handleSubmit(onSubmit)}
-            className="px-5 pb-5 flex flex-col gap-4 border-t border-slate-100 pt-4"
+            // AQUI FOI A MUDANÇA 3: Adicionada a animação de entrada (animate-in)
+            className="px-5 pb-5 flex flex-col gap-4 border-t border-slate-100 pt-4 animate-in slide-in-from-top-2 duration-200"
           >
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -95,7 +100,7 @@ export default function DespesasTab() {
               <input
                 type="date"
                 {...register('data_custo', { required: true })}
-                className="w-full border border-slate-300 rounded-xl px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500"
+                className="w-full border border-slate-300 rounded-xl px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white"
               />
             </div>
 
