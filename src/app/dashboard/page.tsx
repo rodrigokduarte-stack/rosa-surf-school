@@ -83,7 +83,7 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-1.5">
             <Waves size={22} className="text-pink-500" />
-            <span className="text-xl font-bold text-white tracking-tight leading-none">Rosa Surf</span>
+            <span className="text-xl font-bold text-white tracking-tight leading-none">Rosa Surf School</span>
           </div>
           <div className="bg-white/10 rounded-full px-3 py-1 flex items-center gap-1.5 w-fit backdrop-blur-sm border border-white/5">
             <span className="text-[11px] text-white/70 font-medium">{diaSemana}</span>

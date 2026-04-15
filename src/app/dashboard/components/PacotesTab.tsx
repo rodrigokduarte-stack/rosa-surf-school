@@ -6,17 +6,17 @@ import { supabase } from '@/lib/supabase'
 import { Pacote, NovoPacote } from '@/types'
 import { formatarValor } from '@/lib/dateUtils'
 import {
-  PlusCircle, Package, User, DollarSign,
-  ChevronDown, ChevronUp, CheckCircle, X,
+  Plus, Package, User, DollarSign, CheckCircle, X, Layers
 } from 'lucide-react'
 
 export default function PacotesTab() {
   const [pacotes, setPacotes] = useState<Pacote[]>([])
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
-  const [sucesso, setSucesso] = useState(false)
-  const [formAberto, setFormAberto] = useState(true)
   const [finalizando, setFinalizando] = useState<string | null>(null)
+  
+  // Controle do Modal
+  const [modalAberto, setModalAberto] = useState(false)
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<NovoPacote>({
     defaultValues: { status: 'Ativo', aulas_restantes: 0, valor_pago: 0 },
@@ -45,14 +45,14 @@ export default function PacotesTab() {
     const { error } = await supabase.from('pacotes').insert([payload])
     setSalvando(false)
     if (!error) {
-      setSucesso(true)
       reset({ status: 'Ativo', aulas_restantes: 0, valor_pago: 0 })
       carregarPacotes()
-      setTimeout(() => setSucesso(false), 3000)
+      setModalAberto(false) // Fecha o modal após salvar
     }
   }
 
   async function finalizarPacote(id: string) {
+    if (!window.confirm('Deseja realmente finalizar este pacote?')) return
     setFinalizando(id)
     await supabase.from('pacotes').update({ status: 'Finalizado' }).eq('id', id)
     setFinalizando(null)
@@ -63,217 +63,214 @@ export default function PacotesTab() {
   const finalizados = pacotes.filter(p => p.status === 'Finalizado')
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-5 flex flex-col gap-5">
+    <>
+      <div className="px-4 py-2 flex flex-col gap-6">
 
-      {/* Resumo */}
-      {ativos.length > 0 && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white rounded-2xl p-3 shadow-sm text-center">
-            <p className="text-2xl font-bold text-pink-600">{ativos.length}</p>
-            <p className="text-xs text-slate-500 mt-0.5">Pacotes ativos</p>
+        {/* Faixa de KPIs (Subindo em cima do fundo escuro) */}
+        <div className="flex gap-3 -mt-6">
+          <div className="flex-[1.2] bg-gradient-to-br from-pink-500 to-rose-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(232,67,106,0.3)] relative overflow-hidden">
+            <span className="text-[32px] font-black text-white leading-none">{ativos.length}</span>
+            <span className="text-[11px] font-medium text-white/80 mt-1">Pacotes ativos</span>
+            <Package size={80} className="absolute -bottom-6 -right-4 text-white opacity-10" />
           </div>
-          <div className="bg-white rounded-2xl p-3 shadow-sm text-center">
-            <p className="text-lg font-bold text-slate-700">
+          <div className="flex-1 bg-white rounded-[16px] p-4 shadow-sm flex flex-col justify-center border border-slate-100">
+            <span className="text-[28px] font-black text-slate-800 leading-none">
               {ativos.reduce((s, p) => s + p.aulas_restantes, 0)}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">Aulas restantes</p>
+            </span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">Aulas Restantes</span>
           </div>
         </div>
-      )}
 
-      {/* Formulário */}
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <button
-          onClick={() => setFormAberto(v => !v)}
-          className="w-full flex items-center justify-between px-5 py-4 text-left"
-        >
-          <div className="flex items-center gap-2 text-pink-600 font-semibold">
-            <PlusCircle size={20} />
-            <span>Novo pacote</span>
-          </div>
-          {formAberto
-            ? <ChevronUp size={18} className="text-slate-400" />
-            : <ChevronDown size={18} className="text-slate-400" />}
-        </button>
-
-        {formAberto && (
-          <form
-            onSubmit={handleSubmit(onSubmit)}
-            className="px-5 pb-5 flex flex-col gap-4 border-t border-slate-100 pt-4"
-          >
-            {/* Cliente */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                <span className="flex items-center gap-1"><User size={14} /> Nome do Cliente</span>
-              </label>
-              <input
-                type="text"
-                placeholder="Ex: João Silva"
-                {...register('nome_cliente', { required: true })}
-                className="w-full border border-slate-300 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500"
-              />
-              {errors.nome_cliente && <p className="text-red-500 text-xs mt-1">Obrigatório</p>}
-            </div>
-
-            {/* Total de aulas */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                <span className="flex items-center gap-1"><Package size={14} /> Total de Aulas</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                placeholder="Ex: 10"
-                {...register('total_aulas', { required: true, valueAsNumber: true, min: 1 })}
-                className="w-full border border-slate-300 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500"
-              />
-              {errors.total_aulas && <p className="text-red-500 text-xs mt-1">Obrigatório (mínimo 1)</p>}
-            </div>
-
-            {/* Valor total + valor pago */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  <span className="flex items-center gap-1"><DollarSign size={14} /> Valor Total (R$)</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0,00"
-                  {...register('valor_total', { required: true, valueAsNumber: true })}
-                  className="w-full border border-slate-300 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500"
-                />
-                {errors.valor_total && <p className="text-red-500 text-xs mt-1">Obrigatório</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  <span className="flex items-center gap-1"><DollarSign size={14} /> Valor Pago (R$)</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0,00"
-                  {...register('valor_pago', { valueAsNumber: true })}
-                  className="w-full border border-slate-300 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-pink-500"
-                />
-              </div>
-            </div>
-
-            {sucesso && (
-              <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
-                <CheckCircle size={18} />
-                <span className="text-sm font-medium">Pacote criado com sucesso!</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={salvando}
-              className="w-full bg-pink-600 hover:bg-pink-700 active:bg-pink-800 text-white font-semibold py-4 rounded-xl text-lg transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              <PlusCircle size={20} />
-              {salvando ? 'Salvando...' : 'Criar Pacote'}
-            </button>
-          </form>
-        )}
-      </div>
-
-      {/* Lista de pacotes ativos */}
-      <div>
-        <h2 className="text-base font-semibold text-slate-700 mb-3 px-1 flex items-center gap-2">
-          <Package size={16} className="text-pink-500" />
-          Pacotes Ativos
-        </h2>
-
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="w-7 h-7 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : ativos.length === 0 ? (
-          <div className="bg-white rounded-2xl p-6 shadow-sm text-center text-slate-400">
-            <p className="text-sm">Nenhum pacote ativo</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {ativos.map(pacote => {
-              const progresso = pacote.total_aulas > 0
-                ? ((pacote.total_aulas - pacote.aulas_restantes) / pacote.total_aulas) * 100
-                : 0
-              const saldo = pacote.valor_total - pacote.valor_pago
-
-              return (
-                <div key={pacote.id} className="bg-white rounded-2xl shadow-sm p-4">
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div>
-                      <p className="font-semibold text-slate-800">{pacote.nome_cliente}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {pacote.total_aulas - pacote.aulas_restantes} de {pacote.total_aulas} aulas realizadas
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => finalizarPacote(pacote.id)}
-                      disabled={finalizando === pacote.id}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0"
-                      title="Finalizar pacote"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-
-                  {/* Barra de progresso */}
-                  <div className="w-full bg-slate-100 rounded-full h-2 mb-3">
-                    <div
-                      className="bg-pink-500 h-2 rounded-full transition-all"
-                      style={{ width: `${progresso}%` }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500">
-                      <span className="font-bold text-pink-600 text-base">{pacote.aulas_restantes}</span> restantes
-                    </span>
-                    <div className="text-right">
-                      <p className="text-xs text-slate-400">
-                        Pago: <span className="font-semibold text-emerald-600">{formatarValor(pacote.valor_pago)}</span>
-                        {' / '}{formatarValor(pacote.valor_total)}
-                      </p>
-                      {saldo > 0 && (
-                        <p className="text-xs text-amber-600 font-medium">Saldo: {formatarValor(saldo)}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Pacotes finalizados */}
-      {finalizados.length > 0 && (
+        {/* Lista de pacotes ativos */}
         <div>
-          <h2 className="text-base font-semibold text-slate-400 mb-3 px-1">Finalizados</h2>
-          <div className="flex flex-col gap-2">
-            {finalizados.map(pacote => (
-              <div key={pacote.id} className="bg-white rounded-2xl shadow-sm p-4 opacity-60">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-slate-600">{pacote.nome_cliente}</p>
-                    <p className="text-xs text-slate-400">{pacote.total_aulas} aulas · {formatarValor(pacote.valor_total)}</p>
+          <h2 className="text-[15px] font-bold text-slate-800 flex items-center gap-2 mb-4">
+            <span className="w-2 h-2 rounded-full bg-pink-500" />
+            Pacotes em Andamento
+          </h2>
+
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <div className="w-7 h-7 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : ativos.length === 0 ? (
+            <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
+              <span className="text-4xl mb-3 block">🏄‍♀️</span>
+              <p className="text-slate-500 font-medium text-sm">Nenhum pacote ativo.</p>
+              <p className="text-slate-400 text-xs mt-1">Venda novos planos para preencher aqui!</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {ativos.map(pacote => {
+                const progresso = pacote.total_aulas > 0
+                  ? ((pacote.total_aulas - pacote.aulas_restantes) / pacote.total_aulas) * 100
+                  : 0
+                const saldo = pacote.valor_total - pacote.valor_pago
+
+                return (
+                  <div key={pacote.id} className="bg-white rounded-[20px] p-5 shadow-[0_2px_16px_rgba(0,0,0,0.04)] border border-slate-100 transition-all">
+                    <div className="flex items-start justify-between gap-2 mb-4">
+                      <div>
+                        <h3 className="text-lg font-black text-slate-800 tracking-tight">{pacote.nome_cliente}</h3>
+                        <p className="text-xs font-bold text-slate-400 mt-0.5 uppercase tracking-wider">
+                          {pacote.total_aulas - pacote.aulas_restantes} de {pacote.total_aulas} aulas realizadas
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => finalizarPacote(pacote.id)}
+                        disabled={finalizando === pacote.id}
+                        className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors shrink-0"
+                        title="Finalizar pacote"
+                      >
+                        {finalizando === pacote.id ? <span className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <X size={16} strokeWidth={3} />}
+                      </button>
+                    </div>
+
+                    {/* Barra de progresso */}
+                    <div className="w-full bg-slate-100 rounded-full h-1.5 mb-4 overflow-hidden">
+                      <div
+                        className="bg-pink-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${progresso}%` }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between text-sm bg-slate-50 p-3 rounded-xl">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Aulas</span>
+                        <span className="font-black text-pink-600 text-base">{pacote.aulas_restantes}</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          Pago: <span className="text-emerald-600">{formatarValor(pacote.valor_pago)}</span> / {formatarValor(pacote.valor_total)}
+                        </p>
+                        {saldo > 0 && (
+                          <p className="text-xs text-amber-600 font-black mt-0.5">Saldo: {formatarValor(saldo)}</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-medium">
-                    Finalizado
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Pacotes finalizados */}
+        {finalizados.length > 0 && (
+          <div className="mt-4">
+            <h2 className="text-[15px] font-bold text-slate-400 flex items-center gap-2 mb-4">
+              Histórico Finalizado
+            </h2>
+            <div className="flex flex-col gap-2">
+              {finalizados.map(pacote => (
+                <div key={pacote.id} className="bg-white rounded-[16px] shadow-sm p-4 opacity-75 border border-slate-100 flex items-center justify-between">
+                  <div>
+                    <p className="font-bold text-slate-600">{pacote.nome_cliente}</p>
+                    <p className="text-xs font-semibold text-slate-400">{pacote.total_aulas} aulas · {formatarValor(pacote.valor_total)}</p>
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">
+                    Concluído
                   </span>
                 </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* FAB - Botão Flutuante (Rosa) */}
+      <button
+        onClick={() => setModalAberto(true)}
+        className="fixed bottom-[88px] right-5 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-[0_4px_20px_rgba(232,67,106,0.45)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40"
+      >
+        <Plus size={28} strokeWidth={2.5} />
+      </button>
+
+      {/* MODAL BOTTOM SHEET: Novo Pacote */}
+      {modalAberto && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+          <div 
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setModalAberto(false)}
+          />
+          
+          <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-10 shadow-2xl">
+            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden" />
+            
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-black text-slate-800">Novo Pacote</h3>
+                <p className="text-sm text-slate-500 mt-0.5">Venda de plano de aulas</p>
               </div>
-            ))}
+              <button 
+                onClick={() => setModalAberto(false)}
+                className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><User size={13} /> Nome do Cliente</label>
+                <input
+                  type="text"
+                  placeholder="Ex: João Silva"
+                  {...register('nome_cliente', { required: true })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                />
+                {errors.nome_cliente && <p className="text-red-500 text-xs mt-1">Nome é obrigatório</p>}
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Layers size={13} /> Total de Aulas</label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Ex: 10"
+                  {...register('total_aulas', { required: true, valueAsNumber: true, min: 1 })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                />
+                {errors.total_aulas && <p className="text-red-500 text-xs mt-1">Mínimo de 1 aula</p>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><DollarSign size={13} /> Valor Total (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0,00"
+                    {...register('valor_total', { required: true, valueAsNumber: true })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                  />
+                  {errors.valor_total && <p className="text-red-500 text-xs mt-1">Obrigatório</p>}
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><DollarSign size={13} /> Valor Pago (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0,00"
+                    {...register('valor_pago', { valueAsNumber: true })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={salvando}
+                className="w-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-bold py-4 rounded-xl text-lg mt-2 shadow-[0_4px_14px_rgba(232,67,106,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {salvando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={20} />}
+                {salvando ? 'Salvando...' : 'Criar Pacote'}
+              </button>
+            </form>
           </div>
         </div>
       )}
-
-      <div className="h-4" />
-    </div>
+    </>
   )
 }
