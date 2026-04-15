@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { supabase } from '@/lib/supabase'
 import { RegistroAula, NovaAula, Pacote } from '@/types'
@@ -45,7 +45,6 @@ export default function AulasTab() {
   const [listaProfessores, setListaProfessores] = useState<string[]>([])
   const [professores, setProfessores] = useState<string[]>([])
   
-  // Estados para edição rápida do Professor inline
   const [editandoProfId, setEditandoProfId] = useState<string | null>(null)
   const [profsTemporarios, setProfsTemporarios] = useState<string[]>([])
   const [salvandoProf, setSalvandoProf] = useState(false)
@@ -53,6 +52,9 @@ export default function AulasTab() {
   const [pacotes, setPacotes] = useState<Pacote[]>([])
   const [pacoteSelecionado, setPacoteSelecionado] = useState<string>('')
   const [excluindo, setExcluindo] = useState<string | null>(null)
+
+  // Sensor de arrasto para a barrinha do Modal
+  const touchStartY = useRef(0)
 
   const { register, handleSubmit, reset, setValue, watch } = useForm<FormData>({
     defaultValues: {
@@ -138,7 +140,7 @@ export default function AulasTab() {
 
     const payload = {
       ...dados,
-      nome_professor: professores, // Pode estar vazio agora
+      nome_professor: professores,
       pacote_id: pacoteSelecionado || null,
       valor_pago: valorFinalPago
     }
@@ -169,7 +171,6 @@ export default function AulasTab() {
     }
   }
 
-  // Função para salvar edição rápida de professores
   async function salvarEdicaoProfessores(id: string) {
     setSalvandoProf(true)
     const { error } = await supabase.from('registro_aulas').update({ nome_professor: profsTemporarios }).eq('id', id)
@@ -198,7 +199,6 @@ export default function AulasTab() {
   const renderCard = (aula: AulaComPagamento) => {
     const expandido = cardExpandido === aula.id
     
-    // Análise de Professores
     let arrayProfs: string[] = []
     if (aula.nome_professor) {
       arrayProfs = Array.isArray(aula.nome_professor) ? aula.nome_professor : [aula.nome_professor]
@@ -209,7 +209,6 @@ export default function AulasTab() {
     return (
       <div key={aula.id} className={`bg-white rounded-[24px] p-5 shadow-[0_2px_16px_rgba(0,0,0,0.04)] border transition-all ${urgenciaProf ? 'border-red-200 shadow-[0_4px_16px_rgba(239,68,68,0.1)]' : 'border-slate-100'}`}>
         
-        {/* Topo do Card */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
@@ -220,7 +219,6 @@ export default function AulasTab() {
                 {aula.modalidade.replace('Aula ', '')}
               </span>
               
-              {/* Tags Inteligentes de Professor */}
               {semProfessor && (
                 urgenciaProf ? (
                   <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded-full animate-pulse">
@@ -244,7 +242,7 @@ export default function AulasTab() {
 
         <button 
           onClick={() => {
-            if (expandido) setEditandoProfId(null) // Reseta edição ao fechar
+            if (expandido) setEditandoProfId(null) 
             setCardExpandido(expandido ? null : aula.id)
           }}
           className="w-full flex items-center justify-between text-left group"
@@ -258,9 +256,8 @@ export default function AulasTab() {
         {expandido && (
           <div className="mt-4 pt-4 border-t border-slate-100">
             
-            {/* Seção de Professores (Leitura ou Edição) */}
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Equipa na Água</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Professores</span>
               {!editandoProfId && (
                 <button 
                   onClick={() => { setProfsTemporarios(arrayProfs); setEditandoProfId(aula.id); }} 
@@ -272,7 +269,6 @@ export default function AulasTab() {
             </div>
             
             {editandoProfId === aula.id ? (
-              // MODO EDIÇÃO INLINE
               <div className="mb-4 bg-pink-50/50 p-3 rounded-2xl border border-pink-100">
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   {listaProfessores.map(nome => {
@@ -295,12 +291,11 @@ export default function AulasTab() {
                     disabled={salvandoProf} 
                     className="flex-1 bg-pink-600 text-white text-xs font-bold py-2.5 rounded-xl flex justify-center items-center shadow-sm disabled:opacity-60"
                   >
-                    {salvandoProf ? 'A Guardar...' : 'Confirmar'}
+                    {salvandoProf ? 'Salvando...' : 'Confirmar'}
                   </button>
                 </div>
               </div>
             ) : (
-              // MODO VISUALIZAÇÃO
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {semProfessor ? (
                   <div className="col-span-2 bg-slate-50 border border-dashed border-slate-300 rounded-xl py-3 flex items-center justify-center">
@@ -358,7 +353,6 @@ export default function AulasTab() {
     <>
       <div className="px-4 py-2 flex flex-col gap-6">
 
-        {/* Faixa de KPIs */}
         <div className="flex gap-3 -mt-6">
           <div className="flex-[1.2] bg-gradient-to-br from-pink-500 to-rose-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(232,67,106,0.3)] relative overflow-hidden">
             <span className="text-[32px] font-black text-white leading-none">{aulasHoje.length}</span>
@@ -380,7 +374,6 @@ export default function AulasTab() {
           </div>
         </div>
 
-        {/* CONTROLE DE ABAS (Estilo Airbnb) */}
         <div className="flex bg-slate-200/50 p-1.5 rounded-[16px]">
           <button
             onClick={() => setAbaVisivel('hoje')}
@@ -400,19 +393,17 @@ export default function AulasTab() {
           </button>
         </div>
 
-        {/* LISTAGEM DE AULAS */}
         <div>
           {loadingAulas ? (
             <div className="flex justify-center py-10">
               <div className="w-7 h-7 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : abaVisivel === 'hoje' ? (
-            // === VISÃO HOJE ===
             aulasHoje.length === 0 ? (
               <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
                 <span className="text-4xl mb-3 block">🏄‍♂️</span>
                 <p className="text-slate-500 font-medium text-sm">O mar está calmo.</p>
-                <p className="text-slate-400 text-xs mt-1">Nenhuma aula registada para hoje.</p>
+                <p className="text-slate-400 text-xs mt-1">Nenhuma aula registrada para hoje.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-4">
@@ -420,7 +411,6 @@ export default function AulasTab() {
               </div>
             )
           ) : (
-            // === VISÃO PROGRAMADAS ===
             aulasProgramadas.length === 0 ? (
               <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
                 <span className="text-4xl mb-3 block">📅</span>
@@ -453,11 +443,25 @@ export default function AulasTab() {
         <Plus size={28} strokeWidth={2.5} />
       </button>
 
+      {/* MODAL Z-INDEX AUMENTADO PARA [60] */}
       {modalAberto && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setModalAberto(false)} />
-          <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-10 max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden" />
+          
+          <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-12 max-h-[90vh] overflow-y-auto shadow-2xl">
+            
+            {/* Puxador (Handle) com sensor de arrasto (swipe-to-close) */}
+            <div 
+              className="w-full pb-4 pt-2 -mt-2 flex justify-center sm:hidden cursor-grab active:cursor-grabbing"
+              onTouchStart={(e) => touchStartY.current = e.touches[0].clientY}
+              onTouchEnd={(e) => {
+                if (e.changedTouches[0].clientY - touchStartY.current > 40) {
+                  setModalAberto(false)
+                }
+              }}
+            >
+              <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
+            </div>
             
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -500,14 +504,13 @@ export default function AulasTab() {
                 <input type="text" placeholder="Nome do cliente/grupo" {...register('nome_cliente', { required: true })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500" />
               </div>
 
-              {/* Professores - AGORA É OPCIONAL */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><GraduationCap size={13}/> Equipa</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><GraduationCap size={13}/> Professores</label>
                   <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Opcional</span>
                 </div>
                 {listaProfessores.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">Nenhum professor registado ainda.</p>
+                  <p className="text-xs text-slate-400 italic">Nenhum professor registrado ainda.</p>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
                     {listaProfessores.map(nome => {
@@ -583,7 +586,7 @@ export default function AulasTab() {
                 className="w-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-bold py-4 rounded-xl text-lg mt-2 shadow-[0_4px_14px_rgba(232,67,106,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {salvando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={20} />}
-                {salvando ? 'A Guardar...' : 'Guardar Aula'}
+                {salvando ? 'Adicionando...' : 'Adicionar Aula'}
               </button>
             </form>
           </div>
