@@ -53,7 +53,9 @@ export default function AulasTab() {
   const [pacoteSelecionado, setPacoteSelecionado] = useState<string>('')
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
-  // Sensor de arrasto para a barrinha do Modal
+  // Motor de física para arrastar o Modal
+  const [dragOffset, setDragOffset] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
   const touchStartY = useRef(0)
 
   const { register, handleSubmit, reset, setValue, watch } = useForm<FormData>({
@@ -195,6 +197,30 @@ export default function AulasTab() {
     acc[aula.data_aula].push(aula)
     return acc
   }, {} as Record<string, AulaComPagamento[]>)
+
+  // Handlers para o Swipe do Modal
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY
+    setIsDragging(true)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return
+    const currentY = e.touches[0].clientY
+    const diff = currentY - touchStartY.current
+    if (diff > 0) {
+      setDragOffset(diff)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setIsDragging(false)
+    if (dragOffset > 100) {
+      setModalAberto(false)
+    }
+    setDragOffset(0) // Volta para o lugar se não puxar o suficiente
+  }
+
 
   const renderCard = (aula: AulaComPagamento) => {
     const expandido = cardExpandido === aula.id
@@ -351,7 +377,7 @@ export default function AulasTab() {
 
   return (
     <>
-      <div className="px-4 py-2 flex flex-col gap-6">
+      <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
 
         <div className="flex gap-3 -mt-6">
           <div className="flex-[1.2] bg-gradient-to-br from-pink-500 to-rose-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(232,67,106,0.3)] relative overflow-hidden">
@@ -443,22 +469,22 @@ export default function AulasTab() {
         <Plus size={28} strokeWidth={2.5} />
       </button>
 
-      {/* MODAL Z-INDEX AUMENTADO PARA [60] */}
+      {/* MODAL BOTTOM SHEET */}
       {modalAberto && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setModalAberto(false)} />
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" onClick={() => setModalAberto(false)} />
           
-          <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-12 max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div 
+            className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-32 max-h-[90vh] overflow-y-auto shadow-2xl transition-transform"
+            style={{ transform: `translateY(${dragOffset}px)` }}
+          >
             
-            {/* Puxador (Handle) com sensor de arrasto (swipe-to-close) */}
+            {/* Puxador (Handle) COM ZONA DE TOQUE (Swipe to close) */}
             <div 
-              className="w-full pb-4 pt-2 -mt-2 flex justify-center sm:hidden cursor-grab active:cursor-grabbing"
-              onTouchStart={(e) => touchStartY.current = e.touches[0].clientY}
-              onTouchEnd={(e) => {
-                if (e.changedTouches[0].clientY - touchStartY.current > 40) {
-                  setModalAberto(false)
-                }
-              }}
+              className="w-full pb-6 pt-2 -mt-4 flex justify-center cursor-grab active:cursor-grabbing"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
             >
               <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
             </div>
@@ -475,16 +501,16 @@ export default function AulasTab() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
               
-              {/* NOVO BLOCO DATA E HORA (Grid rígido e mais espaçado) */}
-              <div className="grid grid-cols-2 gap-5">
+              {/* DATA E HORA SEPARADOS (Fim do "Colado") */}
+              <div className="flex flex-col gap-4">
                 <div className="flex flex-col">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <Calendar size={14}/> Data
+                    <Calendar size={14}/> Data da Aula
                   </label>
                   <input 
                     type="date" 
                     {...register('data_aula', { required: true })} 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 shadow-sm transition-all" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all" 
                   />
                 </div>
                 <div className="flex flex-col">
@@ -494,7 +520,7 @@ export default function AulasTab() {
                   <input 
                     type="time" 
                     {...register('horario', { required: true })} 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 shadow-sm transition-all" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all" 
                   />
                 </div>
               </div>
@@ -505,7 +531,7 @@ export default function AulasTab() {
                   {(['Aula Particular', 'Aula Grupo'] as const).map(op => (
                     <label key={op} className="relative cursor-pointer">
                       <input type="radio" value={op} {...register('modalidade')} className="peer sr-only" />
-                      <div className="bg-slate-50 border border-slate-200 peer-checked:border-pink-500 peer-checked:bg-pink-50 rounded-xl py-3 text-center font-bold text-sm text-slate-500 peer-checked:text-pink-700 transition-all">
+                      <div className="bg-slate-50 border border-slate-200 peer-checked:border-pink-500 peer-checked:bg-pink-50 rounded-xl py-4 text-center font-bold text-sm text-slate-500 peer-checked:text-pink-700 transition-all">
                         {op.replace('Aula ', '')}
                       </div>
                     </label>
@@ -515,7 +541,7 @@ export default function AulasTab() {
 
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><User size={13}/> Aluno Principal</label>
-                <input type="text" placeholder="Nome do cliente/grupo" {...register('nome_cliente', { required: true })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500" />
+                <input type="text" placeholder="Nome do cliente/grupo" {...register('nome_cliente', { required: true })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500" />
               </div>
 
               <div>
@@ -530,7 +556,7 @@ export default function AulasTab() {
                     {listaProfessores.map(nome => {
                       const sel = professores.includes(nome)
                       return (
-                        <label key={nome} className={`flex items-center gap-2 border rounded-xl px-3 py-2.5 cursor-pointer transition-all ${sel ? 'border-pink-500 bg-pink-50 shadow-sm' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}>
+                        <label key={nome} className={`flex items-center gap-2 border rounded-xl px-3 py-3 cursor-pointer transition-all ${sel ? 'border-pink-500 bg-pink-50 shadow-sm' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}>
                           <input type="checkbox" className="sr-only" checked={sel} onChange={() => toggleProfessor(nome)} />
                           <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${sel ? 'bg-pink-600 border-pink-600' : 'border-slate-300'}`}>
                             {sel && <CheckCircle size={10} className="text-white" />}
@@ -546,7 +572,7 @@ export default function AulasTab() {
               {pacotes.length > 0 && (
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Package size={13}/> Pacote (opcional)</label>
-                  <select value={pacoteSelecionado} onChange={e => handlePacoteChange(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
+                  <select value={pacoteSelecionado} onChange={e => handlePacoteChange(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
                     <option value="">Nenhum pacote vinculado</option>
                     {pacotes.map(p => (
                       <option key={p.id} value={p.id}>{p.nome_cliente} ({p.aulas_restantes} restantes)</option>
@@ -560,11 +586,11 @@ export default function AulasTab() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><DollarSign size={13}/> Valor Total</label>
-                      <input type="number" step="0.01" min="0" placeholder="0,00" {...register('valor_aula', { required: !temPacote, valueAsNumber: true })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500" />
+                      <input type="number" step="0.01" min="0" placeholder="0,00" {...register('valor_aula', { required: !temPacote, valueAsNumber: true })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500" />
                     </div>
                     <div>
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Pagamento</label>
-                      <select {...register('status_pagamento')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
+                      <select {...register('status_pagamento')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
                         <option value="Pendente">Pendente</option>
                         <option value="Parcial">Parcial</option>
                         <option value="Pago">Pago Total</option>
@@ -573,15 +599,15 @@ export default function AulasTab() {
                   </div>
                   
                   {statusPagamento === 'Parcial' && (
-                    <div className="bg-sky-50 border border-sky-100 rounded-xl p-3">
+                    <div className="bg-sky-50 border border-sky-100 rounded-xl p-4">
                       <label className="text-xs font-bold text-sky-800 uppercase tracking-wider mb-1.5 block">Valor de Sinal (Pago)</label>
-                      <input type="number" step="0.01" min="0" placeholder="Ex: 50,00" {...register('valor_pago', { required: statusPagamento === 'Parcial', valueAsNumber: true })} className="w-full bg-white border border-sky-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500" />
+                      <input type="number" step="0.01" min="0" placeholder="Ex: 50,00" {...register('valor_pago', { required: statusPagamento === 'Parcial', valueAsNumber: true })} className="w-full bg-white border border-sky-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500" />
                     </div>
                   )}
                   
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Meio de Pagamento</label>
-                    <select {...register('forma_pagamento')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
+                    <select {...register('forma_pagamento')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
                       <option value="">Não informado</option>
                       {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
                     </select>
@@ -591,13 +617,13 @@ export default function AulasTab() {
 
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Observações</label>
-                <textarea rows={2} placeholder="Ex: Prancha Longboard, cliente iniciante..." {...register('observacoes')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 resize-none" />
+                <textarea rows={2} placeholder="Ex: Prancha Longboard, cliente iniciante..." {...register('observacoes')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 resize-none" />
               </div>
 
               <button
                 type="submit"
                 disabled={salvando}
-                className="w-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-bold py-4 rounded-xl text-lg mt-2 shadow-[0_4px_14px_rgba(232,67,106,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-bold py-5 rounded-xl text-lg mt-4 shadow-[0_4px_14px_rgba(232,67,106,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {salvando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={20} />}
                 {salvando ? 'Adicionando...' : 'Adicionar Aula'}
