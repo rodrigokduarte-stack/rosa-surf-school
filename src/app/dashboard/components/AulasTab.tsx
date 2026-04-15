@@ -8,7 +8,7 @@ import { hojeEmBrasilia, formatarValor } from '@/lib/dateUtils'
 import {
   Plus, Clock, User, DollarSign,
   ChevronDown, ChevronUp, CheckCircle, 
-  Package, Trash2, Calendar, X, GraduationCap, Waves
+  Package, Trash2, Calendar, X, GraduationCap, Waves, CalendarDays
 } from 'lucide-react'
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
@@ -16,8 +16,28 @@ const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
 type FormData = Omit<NovaAula, 'nome_professor' | 'pacote_id'> & { valor_pago?: number }
 type AulaComPagamento = RegistroAula & { valor_pago?: number }
 
+// Função auxiliar para deixar as datas das aulas programadas com leitura humana (ex: "Amanhã, 16/04")
+function formatarDataHeader(dataStr: string) {
+  const [ano, mes, dia] = dataStr.split('-')
+  const dataAula = new Date(Number(ano), Number(mes) - 1, Number(dia))
+  const amanha = new Date()
+  amanha.setDate(amanha.getDate() + 1)
+  
+  let nomeDia = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][dataAula.getDay()]
+  
+  if (dataAula.getDate() === amanha.getDate() && dataAula.getMonth() === amanha.getMonth()) {
+    nomeDia = 'Amanhã'
+  }
+
+  return `${nomeDia}, ${dia}/${mes}`
+}
+
 export default function AulasTab() {
-  const [aulas, setAulas] = useState<AulaComPagamento[]>([])
+  // Controle de Abas Estilo Airbnb
+  const [abaVisivel, setAbaVisivel] = useState<'hoje' | 'programadas'>('hoje')
+  
+  const [aulasHoje, setAulasHoje] = useState<AulaComPagamento[]>([])
+  const [aulasProgramadas, setAulasProgramadas] = useState<AulaComPagamento[]>([])
   const [loadingAulas, setLoadingAulas] = useState(true)
   const [salvando, setSalvando] = useState(false)
   
@@ -33,7 +53,6 @@ export default function AulasTab() {
   const [pacoteSelecionado, setPacoteSelecionado] = useState<string>('')
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
-  // REMOVIDA A VARIÁVEL 'errors' QUE ESTAVA TRAVANDO A VERCEL
   const { register, handleSubmit, reset, setValue, watch } = useForm<FormData>({
     defaultValues: {
       data_aula: hojeEmBrasilia(),
@@ -51,12 +70,25 @@ export default function AulasTab() {
 
   const carregarAulas = useCallback(async () => {
     setLoadingAulas(true)
-    const { data } = await supabase
+    const hoje = hojeEmBrasilia()
+
+    // Busca aulas de Hoje
+    const { data: dataHoje } = await supabase
       .from('registro_aulas')
       .select('*')
-      .eq('data_aula', hojeEmBrasilia())
+      .eq('data_aula', hoje)
       .order('horario', { ascending: true })
-    setAulas(data ?? [])
+
+    // Busca aulas Programadas (Futuras)
+    const { data: dataFuturas } = await supabase
+      .from('registro_aulas')
+      .select('*')
+      .gt('data_aula', hoje)
+      .order('data_aula', { ascending: true })
+      .order('horario', { ascending: true })
+
+    setAulasHoje(dataHoje ?? [])
+    setAulasProgramadas(dataFuturas ?? [])
     setLoadingAulas(false)
   }, [])
 
@@ -79,7 +111,10 @@ export default function AulasTab() {
     setExcluindo(id)
     const { error } = await supabase.from('registro_aulas').delete().eq('id', id)
     setExcluindo(null)
-    if (!error) setAulas(prev => prev.filter(a => a.id !== id))
+    if (!error) {
+      setAulasHoje(prev => prev.filter(a => a.id !== id))
+      setAulasProgramadas(prev => prev.filter(a => a.id !== id))
+    }
   }
 
   function toggleProfessor(nome: string) {
@@ -138,8 +173,9 @@ export default function AulasTab() {
     }
   }
 
-  const totalDia = aulas.reduce((sum, a) => sum + Number(a.valor_aula), 0)
-  const totalPago = aulas.reduce((sum, a) => {
+  // KPIs mantidos baseados no dia de hoje para o caixa diário
+  const totalDia = aulasHoje.reduce((sum, a) => sum + Number(a.valor_aula), 0)
+  const totalPago = aulasHoje.reduce((sum, a) => {
     if (a.status_pagamento === 'Pago') return sum + Number(a.valor_aula)
     if (a.status_pagamento === 'Parcial') return sum + Number(a.valor_pago || 0)
     return sum
@@ -147,150 +183,192 @@ export default function AulasTab() {
 
   const temPacote = !!pacoteSelecionado
 
+  // Agrupa as aulas programadas por data para a visão "Programadas"
+  const aulasAgrupadas = aulasProgramadas.reduce((acc, aula) => {
+    if (!acc[aula.data_aula]) acc[aula.data_aula] = []
+    acc[aula.data_aula].push(aula)
+    return acc
+  }, {} as Record<string, AulaComPagamento[]>)
+
+  // Função isolada para renderizar o Card (evita duplicar código nas duas abas)
+  const renderCard = (aula: AulaComPagamento) => {
+    const expandido = cardExpandido === aula.id
+    const arrayProfs = Array.isArray(aula.nome_professor) ? aula.nome_professor : [aula.nome_professor]
+
+    return (
+      <div key={aula.id} className="bg-white rounded-[24px] p-5 shadow-[0_2px_16px_rgba(0,0,0,0.04)] border border-slate-100 transition-all">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
+              <Clock size={12} /> {aula.horario}
+            </span>
+            <div className="flex gap-1.5">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${aula.modalidade === 'Aula Particular' ? 'bg-pink-100 text-pink-700' : 'bg-violet-100 text-violet-700'}`}>
+                {aula.modalidade.replace('Aula ', '')}
+              </span>
+              {aula.pacote_id && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">Pacote</span>
+              )}
+            </div>
+          </div>
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 ${
+            aula.status_pagamento === 'Pago' ? 'bg-emerald-100 text-emerald-700' : 
+            aula.status_pagamento === 'Parcial' ? 'bg-amber-100 text-amber-700' : 'bg-red-50 text-red-600'
+          }`}>
+            {aula.status_pagamento === 'Pago' ? '✓ Pago' : aula.status_pagamento === 'Parcial' ? 'Parcial' : 'Pendente'}
+          </span>
+        </div>
+
+        <button 
+          onClick={() => setCardExpandido(expandido ? null : aula.id)}
+          className="w-full flex items-center justify-between text-left group"
+        >
+          <h3 className="text-lg font-black text-slate-800 tracking-tight group-hover:text-pink-600 transition-colors">
+            {aula.nome_cliente}
+          </h3>
+          {expandido ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
+        </button>
+
+        {expandido && (
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Professores na Água</span>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {arrayProfs.map(prof => (
+                <div key={prof} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-400 to-rose-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                    {prof.substring(0,2).toUpperCase()}
+                  </div>
+                  <span className="text-xs font-bold text-slate-700 truncate">{prof.split(' ')[0]}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-3 mb-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500 font-medium">Valor Total:</span>
+                <span className="font-bold text-slate-800">{formatarValor(Number(aula.valor_aula))}</span>
+              </div>
+              {aula.status_pagamento === 'Parcial' && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500 font-medium">Falta Pagar:</span>
+                  <span className="font-bold text-amber-600">{formatarValor(Number(aula.valor_aula) - Number(aula.valor_pago || 0))}</span>
+                </div>
+              )}
+              {aula.observacoes && (
+                <div className="pt-2 border-t border-slate-200 mt-2">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase block mb-1">Notas</span>
+                  <p className="text-xs text-slate-600 italic leading-snug">{aula.observacoes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button 
+                onClick={() => excluirAula(aula.id, aula.nome_cliente)}
+                disabled={excluindo === aula.id}
+                className="flex-1 bg-red-50 border border-red-200 text-red-600 font-bold text-xs py-2.5 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5"
+              >
+                {excluindo === aula.id ? <span className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Trash2 size={14} />}
+                {excluindo === aula.id ? 'Excluindo...' : 'Remover Aula'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="px-4 py-2 flex flex-col gap-6">
 
-        {/* Faixa de KPIs (Subindo em cima do fundo escuro) */}
+        {/* Faixa de KPIs */}
         <div className="flex gap-3 -mt-6">
           <div className="flex-[1.2] bg-gradient-to-br from-pink-500 to-rose-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(232,67,106,0.3)] relative overflow-hidden">
-            <span className="text-[32px] font-black text-white leading-none">{aulas.length}</span>
+            <span className="text-[32px] font-black text-white leading-none">{aulasHoje.length}</span>
             <span className="text-[11px] font-medium text-white/80 mt-1">Aulas hoje</span>
             <div className="mt-2 text-[10px] bg-white/20 px-2.5 py-0.5 rounded-full text-white w-fit font-bold backdrop-blur-md">
               🌊 Ativas
             </div>
-            {/* Decoração sutil de onda no card */}
             <Waves size={80} className="absolute -bottom-6 -right-4 text-white opacity-10" />
           </div>
           <div className="flex-1 flex flex-col gap-2.5">
             <div className="flex-1 bg-white rounded-[16px] p-3 shadow-sm flex flex-col justify-center border border-slate-100">
               <span className="text-[18px] font-bold text-emerald-600 leading-tight">{formatarValor(totalPago)}</span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Recebido</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Recebido Hoje</span>
             </div>
             <div className="flex-1 bg-white rounded-[16px] p-3 shadow-sm flex flex-col justify-center border border-slate-100">
               <span className="text-[18px] font-bold text-slate-800 leading-tight">{formatarValor(totalDia)}</span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Total Mês</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Total Dia</span>
             </div>
           </div>
         </div>
 
-        {/* Seção de Cards de Aula */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[15px] font-bold text-slate-800 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-pink-500" />
-              Agenda de Hoje
-            </h2>
-          </div>
+        {/* CONTROLE DE ABAS (Estilo Airbnb) */}
+        <div className="flex bg-slate-200/50 p-1.5 rounded-[16px]">
+          <button
+            onClick={() => setAbaVisivel('hoje')}
+            className={`flex-1 py-2.5 rounded-[12px] text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+              abaVisivel === 'hoje' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Waves size={16} strokeWidth={abaVisivel === 'hoje' ? 2.5 : 2} /> Hoje
+          </button>
+          <button
+            onClick={() => setAbaVisivel('programadas')}
+            className={`flex-1 py-2.5 rounded-[12px] text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+              abaVisivel === 'programadas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <CalendarDays size={16} strokeWidth={abaVisivel === 'programadas' ? 2.5 : 2} /> Programadas
+          </button>
+        </div>
 
+        {/* LISTAGEM DE AULAS */}
+        <div>
           {loadingAulas ? (
             <div className="flex justify-center py-10">
               <div className="w-7 h-7 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : aulas.length === 0 ? (
-            <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
-              <span className="text-4xl mb-3 block">🏄‍♂️</span>
-              <p className="text-slate-500 font-medium text-sm">O mar está calmo.</p>
-              <p className="text-slate-400 text-xs mt-1">Nenhuma aula registrada para hoje.</p>
-            </div>
+          ) : abaVisivel === 'hoje' ? (
+            // === VISÃO HOJE ===
+            aulasHoje.length === 0 ? (
+              <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
+                <span className="text-4xl mb-3 block">🏄‍♂️</span>
+                <p className="text-slate-500 font-medium text-sm">O mar está calmo.</p>
+                <p className="text-slate-400 text-xs mt-1">Nenhuma aula registrada para hoje.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {aulasHoje.map(renderCard)}
+              </div>
+            )
           ) : (
-            <div className="flex flex-col gap-4">
-              {aulas.map(aula => {
-                const expandido = cardExpandido === aula.id
-                const arrayProfs = Array.isArray(aula.nome_professor) ? aula.nome_professor : [aula.nome_professor]
-
-                return (
-                  <div key={aula.id} className="bg-white rounded-[24px] p-5 shadow-[0_2px_16px_rgba(0,0,0,0.04)] border border-slate-100 transition-all">
-                    {/* Topo do Card: Horário e Tags */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
-                          <Clock size={12} /> {aula.horario}
-                        </span>
-                        <div className="flex gap-1.5">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${aula.modalidade === 'Aula Particular' ? 'bg-pink-100 text-pink-700' : 'bg-violet-100 text-violet-700'}`}>
-                            {aula.modalidade.replace('Aula ', '')}
-                          </span>
-                          {aula.pacote_id && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">Pacote</span>
-                          )}
-                        </div>
-                      </div>
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 ${
-                        aula.status_pagamento === 'Pago' ? 'bg-emerald-100 text-emerald-700' : 
-                        aula.status_pagamento === 'Parcial' ? 'bg-amber-100 text-amber-700' : 'bg-red-50 text-red-600'
-                      }`}>
-                        {aula.status_pagamento === 'Pago' ? '✓ Pago' : aula.status_pagamento === 'Parcial' ? 'Parcial' : 'Pendente'}
-                      </span>
+            // === VISÃO PROGRAMADAS ===
+            aulasProgramadas.length === 0 ? (
+              <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
+                <span className="text-4xl mb-3 block">📅</span>
+                <p className="text-slate-500 font-medium text-sm">Agenda limpa.</p>
+                <p className="text-slate-400 text-xs mt-1">Nenhuma aula agendada para os próximos dias.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-6">
+                {Object.entries(aulasAgrupadas).map(([dataStr, aulasDoDia]) => (
+                  <div key={dataStr}>
+                    <h3 className="text-[13px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-3 ml-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                      {formatarDataHeader(dataStr)}
+                    </h3>
+                    <div className="flex flex-col gap-4">
+                      {aulasDoDia.map(renderCard)}
                     </div>
-
-                    {/* Título (Clicável para expandir) */}
-                    <button 
-                      onClick={() => setCardExpandido(expandido ? null : aula.id)}
-                      className="w-full flex items-center justify-between text-left group"
-                    >
-                      <h3 className="text-lg font-black text-slate-800 tracking-tight group-hover:text-pink-600 transition-colors">
-                        {aula.nome_cliente}
-                      </h3>
-                      {expandido ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
-                    </button>
-
-                    {/* Área Expandida (Detalhes e Chamada) */}
-                    {expandido && (
-                      <div className="mt-4 pt-4 border-t border-slate-100">
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Professores na Água</span>
-                        </div>
-                        
-                        {/* Chips de Professores */}
-                        <div className="grid grid-cols-2 gap-2 mb-4">
-                          {arrayProfs.map(prof => (
-                            <div key={prof} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-400 to-rose-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                                {prof.substring(0,2).toUpperCase()}
-                              </div>
-                              <span className="text-xs font-bold text-slate-700 truncate">{prof.split(' ')[0]}</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Dados de Pagamento e Observações */}
-                        <div className="bg-slate-50 rounded-xl p-3 mb-4 space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-500 font-medium">Valor Total:</span>
-                            <span className="font-bold text-slate-800">{formatarValor(Number(aula.valor_aula))}</span>
-                          </div>
-                          {aula.status_pagamento === 'Parcial' && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500 font-medium">Falta Pagar:</span>
-                              <span className="font-bold text-amber-600">{formatarValor(Number(aula.valor_aula) - Number(aula.valor_pago || 0))}</span>
-                            </div>
-                          )}
-                          {aula.observacoes && (
-                            <div className="pt-2 border-t border-slate-200 mt-2">
-                              <span className="text-[11px] font-bold text-slate-400 uppercase block mb-1">Notas</span>
-                              <p className="text-xs text-slate-600 italic leading-snug">{aula.observacoes}</p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Ações do Card */}
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => excluirAula(aula.id, aula.nome_cliente)}
-                            disabled={excluindo === aula.id}
-                            className="flex-1 bg-red-50 border border-red-200 text-red-600 font-bold text-xs py-2.5 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5"
-                          >
-                            {excluindo === aula.id ? <span className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Trash2 size={14} />}
-                            {excluindo === aula.id ? 'Excluindo...' : 'Remover Aula'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
-                )
-              })}
-            </div>
+                ))}
+              </div>
+            )
           )}
         </div>
       </div>
@@ -306,15 +384,12 @@ export default function AulasTab() {
       {/* MODAL BOTTOM SHEET: Formulário de Nova Aula */}
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-          {/* Fundo escuro (Backdrop) */}
           <div 
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => setModalAberto(false)}
           />
           
-          {/* Corpo do Modal */}
           <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-10 max-h-[90vh] overflow-y-auto shadow-2xl">
-            {/* Puxador (Handle) */}
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden" />
             
             <div className="flex items-center justify-between mb-6">
