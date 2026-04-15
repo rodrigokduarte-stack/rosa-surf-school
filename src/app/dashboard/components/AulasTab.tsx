@@ -473,15 +473,29 @@ export default function AulasTab() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Calendar size={13}/> Data</label>
-                  <input type="date" {...register('data_aula', { required: true })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500" />
+            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+              
+              {/* NOVO BLOCO DATA E HORA (Grid rígido e mais espaçado) */}
+              <div className="grid grid-cols-2 gap-5">
+                <div className="flex flex-col">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Calendar size={14}/> Data
+                  </label>
+                  <input 
+                    type="date" 
+                    {...register('data_aula', { required: true })} 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 shadow-sm transition-all" 
+                  />
                 </div>
-                <div className="flex-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Clock size={13}/> Horário</label>
-                  <input type="time" {...register('horario', { required: true })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500" />
+                <div className="flex flex-col">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Clock size={14}/> Horário
+                  </label>
+                  <input 
+                    type="time" 
+                    {...register('horario', { required: true })} 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 shadow-sm transition-all" 
+                  />
                 </div>
               </div>
 
