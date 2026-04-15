@@ -8,7 +8,7 @@ import { hojeEmBrasilia, formatarValor } from '@/lib/dateUtils'
 import {
   Plus, Clock, User, DollarSign,
   ChevronDown, ChevronUp, CheckCircle, 
-  Package, Trash2, Calendar, X, GraduationCap, Waves, CalendarDays
+  Package, Trash2, Calendar, X, GraduationCap, Waves, CalendarDays, AlertCircle
 } from 'lucide-react'
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
@@ -16,7 +16,6 @@ const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
 type FormData = Omit<NovaAula, 'nome_professor' | 'pacote_id'> & { valor_pago?: number }
 type AulaComPagamento = RegistroAula & { valor_pago?: number }
 
-// Função auxiliar para deixar as datas das aulas programadas com leitura humana (ex: "Amanhã, 16/04")
 function formatarDataHeader(dataStr: string) {
   const [ano, mes, dia] = dataStr.split('-')
   const dataAula = new Date(Number(ano), Number(mes) - 1, Number(dia))
@@ -33,7 +32,6 @@ function formatarDataHeader(dataStr: string) {
 }
 
 export default function AulasTab() {
-  // Controle de Abas Estilo Airbnb
   const [abaVisivel, setAbaVisivel] = useState<'hoje' | 'programadas'>('hoje')
   
   const [aulasHoje, setAulasHoje] = useState<AulaComPagamento[]>([])
@@ -41,14 +39,17 @@ export default function AulasTab() {
   const [loadingAulas, setLoadingAulas] = useState(true)
   const [salvando, setSalvando] = useState(false)
   
-  // Controle de UI (Modal e Cards)
   const [modalAberto, setModalAberto] = useState(false)
   const [cardExpandido, setCardExpandido] = useState<string | null>(null)
   
   const [listaProfessores, setListaProfessores] = useState<string[]>([])
   const [professores, setProfessores] = useState<string[]>([])
-  const [professorError, setProfessorError] = useState(false)
   
+  // Estados para edição rápida do Professor inline
+  const [editandoProfId, setEditandoProfId] = useState<string | null>(null)
+  const [profsTemporarios, setProfsTemporarios] = useState<string[]>([])
+  const [salvandoProf, setSalvandoProf] = useState(false)
+
   const [pacotes, setPacotes] = useState<Pacote[]>([])
   const [pacoteSelecionado, setPacoteSelecionado] = useState<string>('')
   const [excluindo, setExcluindo] = useState<string | null>(null)
@@ -72,14 +73,12 @@ export default function AulasTab() {
     setLoadingAulas(true)
     const hoje = hojeEmBrasilia()
 
-    // Busca aulas de Hoje
     const { data: dataHoje } = await supabase
       .from('registro_aulas')
       .select('*')
       .eq('data_aula', hoje)
       .order('horario', { ascending: true })
 
-    // Busca aulas Programadas (Futuras)
     const { data: dataFuturas } = await supabase
       .from('registro_aulas')
       .select('*')
@@ -119,7 +118,6 @@ export default function AulasTab() {
 
   function toggleProfessor(nome: string) {
     setProfessores(prev => prev.includes(nome) ? prev.filter(p => p !== nome) : [...prev, nome])
-    setProfessorError(false)
   }
 
   function handlePacoteChange(pacoteId: string) {
@@ -132,8 +130,6 @@ export default function AulasTab() {
   }
 
   async function onSubmit(dados: FormData) {
-    if (professores.length === 0) { setProfessorError(true); return }
-    setProfessorError(false)
     setSalvando(true)
 
     let valorFinalPago = 0
@@ -142,7 +138,7 @@ export default function AulasTab() {
 
     const payload = {
       ...dados,
-      nome_professor: professores,
+      nome_professor: professores, // Pode estar vazio agora
       pacote_id: pacoteSelecionado || null,
       valor_pago: valorFinalPago
     }
@@ -173,7 +169,17 @@ export default function AulasTab() {
     }
   }
 
-  // KPIs mantidos baseados no dia de hoje para o caixa diário
+  // Função para salvar edição rápida de professores
+  async function salvarEdicaoProfessores(id: string) {
+    setSalvandoProf(true)
+    const { error } = await supabase.from('registro_aulas').update({ nome_professor: profsTemporarios }).eq('id', id)
+    setSalvandoProf(false)
+    if (!error) {
+      setEditandoProfId(null)
+      carregarAulas()
+    }
+  }
+
   const totalDia = aulasHoje.reduce((sum, a) => sum + Number(a.valor_aula), 0)
   const totalPago = aulasHoje.reduce((sum, a) => {
     if (a.status_pagamento === 'Pago') return sum + Number(a.valor_aula)
@@ -183,44 +189,64 @@ export default function AulasTab() {
 
   const temPacote = !!pacoteSelecionado
 
-  // Agrupa as aulas programadas por data para a visão "Programadas"
   const aulasAgrupadas = aulasProgramadas.reduce((acc, aula) => {
     if (!acc[aula.data_aula]) acc[aula.data_aula] = []
     acc[aula.data_aula].push(aula)
     return acc
   }, {} as Record<string, AulaComPagamento[]>)
 
-  // Função isolada para renderizar o Card (evita duplicar código nas duas abas)
   const renderCard = (aula: AulaComPagamento) => {
     const expandido = cardExpandido === aula.id
-    const arrayProfs = Array.isArray(aula.nome_professor) ? aula.nome_professor : [aula.nome_professor]
+    
+    // Análise de Professores
+    let arrayProfs: string[] = []
+    if (aula.nome_professor) {
+      arrayProfs = Array.isArray(aula.nome_professor) ? aula.nome_professor : [aula.nome_professor]
+    }
+    const semProfessor = arrayProfs.length === 0
+    const urgenciaProf = semProfessor && aula.data_aula <= hojeEmBrasilia()
 
     return (
-      <div key={aula.id} className="bg-white rounded-[24px] p-5 shadow-[0_2px_16px_rgba(0,0,0,0.04)] border border-slate-100 transition-all">
+      <div key={aula.id} className={`bg-white rounded-[24px] p-5 shadow-[0_2px_16px_rgba(0,0,0,0.04)] border transition-all ${urgenciaProf ? 'border-red-200 shadow-[0_4px_16px_rgba(239,68,68,0.1)]' : 'border-slate-100'}`}>
+        
+        {/* Topo do Card */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
               <Clock size={12} /> {aula.horario}
             </span>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${aula.modalidade === 'Aula Particular' ? 'bg-pink-100 text-pink-700' : 'bg-violet-100 text-violet-700'}`}>
                 {aula.modalidade.replace('Aula ', '')}
               </span>
-              {aula.pacote_id && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">Pacote</span>
+              
+              {/* Tags Inteligentes de Professor */}
+              {semProfessor && (
+                urgenciaProf ? (
+                  <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded-full animate-pulse">
+                    <AlertCircle size={10} /> Atribuir Prof
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                    ⏳ A Definir
+                  </span>
+                )
               )}
             </div>
           </div>
-          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 ${
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0 ${
             aula.status_pagamento === 'Pago' ? 'bg-emerald-100 text-emerald-700' : 
-            aula.status_pagamento === 'Parcial' ? 'bg-amber-100 text-amber-700' : 'bg-red-50 text-red-600'
+            aula.status_pagamento === 'Parcial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
           }`}>
             {aula.status_pagamento === 'Pago' ? '✓ Pago' : aula.status_pagamento === 'Parcial' ? 'Parcial' : 'Pendente'}
           </span>
         </div>
 
         <button 
-          onClick={() => setCardExpandido(expandido ? null : aula.id)}
+          onClick={() => {
+            if (expandido) setEditandoProfId(null) // Reseta edição ao fechar
+            setCardExpandido(expandido ? null : aula.id)
+          }}
           className="w-full flex items-center justify-between text-left group"
         >
           <h3 className="text-lg font-black text-slate-800 tracking-tight group-hover:text-pink-600 transition-colors">
@@ -231,20 +257,67 @@ export default function AulasTab() {
 
         {expandido && (
           <div className="mt-4 pt-4 border-t border-slate-100">
+            
+            {/* Seção de Professores (Leitura ou Edição) */}
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Professores na Água</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Equipa na Água</span>
+              {!editandoProfId && (
+                <button 
+                  onClick={() => { setProfsTemporarios(arrayProfs); setEditandoProfId(aula.id); }} 
+                  className="text-[10px] font-bold text-pink-600 uppercase tracking-wider hover:underline"
+                >
+                  {semProfessor ? 'Atribuir agora' : 'Alterar'}
+                </button>
+              )}
             </div>
             
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {arrayProfs.map(prof => (
-                <div key={prof} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-400 to-rose-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                    {prof.substring(0,2).toUpperCase()}
-                  </div>
-                  <span className="text-xs font-bold text-slate-700 truncate">{prof.split(' ')[0]}</span>
+            {editandoProfId === aula.id ? (
+              // MODO EDIÇÃO INLINE
+              <div className="mb-4 bg-pink-50/50 p-3 rounded-2xl border border-pink-100">
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  {listaProfessores.map(nome => {
+                    const sel = profsTemporarios.includes(nome)
+                    return (
+                      <label key={nome} className={`flex items-center gap-2 border rounded-xl px-2 py-2.5 cursor-pointer transition-all ${sel ? 'border-pink-500 bg-white shadow-sm' : 'bg-white border-slate-200'}`}>
+                        <input type="checkbox" className="sr-only" checked={sel} onChange={() => setProfsTemporarios(prev => prev.includes(nome) ? prev.filter(p => p !== nome) : [...prev, nome])} />
+                        <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 ${sel ? 'bg-pink-600 border-pink-600' : 'border-slate-300'}`}>
+                          {sel && <CheckCircle size={8} className="text-white" />}
+                        </div>
+                        <span className={`text-[11px] font-bold truncate ${sel ? 'text-pink-700' : 'text-slate-600'}`}>{nome.split(' ')[0]}</span>
+                      </label>
+                    )
+                  })}
                 </div>
-              ))}
-            </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setEditandoProfId(null)} className="flex-1 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl">Cancelar</button>
+                  <button 
+                    onClick={() => salvarEdicaoProfessores(aula.id)} 
+                    disabled={salvandoProf} 
+                    className="flex-1 bg-pink-600 text-white text-xs font-bold py-2.5 rounded-xl flex justify-center items-center shadow-sm disabled:opacity-60"
+                  >
+                    {salvandoProf ? 'A Guardar...' : 'Confirmar'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // MODO VISUALIZAÇÃO
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {semProfessor ? (
+                  <div className="col-span-2 bg-slate-50 border border-dashed border-slate-300 rounded-xl py-3 flex items-center justify-center">
+                    <span className="text-xs font-bold text-slate-400">Nenhum professor alocado</span>
+                  </div>
+                ) : (
+                  arrayProfs.map(prof => (
+                    <div key={prof} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-400 to-rose-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                        {prof.substring(0,2).toUpperCase()}
+                      </div>
+                      <span className="text-xs font-bold text-slate-700 truncate">{prof.split(' ')[0]}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
 
             <div className="bg-slate-50 rounded-xl p-3 mb-4 space-y-2">
               <div className="flex justify-between text-sm">
@@ -339,7 +412,7 @@ export default function AulasTab() {
               <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
                 <span className="text-4xl mb-3 block">🏄‍♂️</span>
                 <p className="text-slate-500 font-medium text-sm">O mar está calmo.</p>
-                <p className="text-slate-400 text-xs mt-1">Nenhuma aula registrada para hoje.</p>
+                <p className="text-slate-400 text-xs mt-1">Nenhuma aula registada para hoje.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-4">
@@ -373,7 +446,6 @@ export default function AulasTab() {
         </div>
       </div>
 
-      {/* FAB - Botão Flutuante Principal */}
       <button
         onClick={() => setModalAberto(true)}
         className="fixed bottom-[88px] right-5 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-[0_4px_20px_rgba(232,67,106,0.45)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40"
@@ -381,14 +453,9 @@ export default function AulasTab() {
         <Plus size={28} strokeWidth={2.5} />
       </button>
 
-      {/* MODAL BOTTOM SHEET: Formulário de Nova Aula */}
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-          <div 
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-            onClick={() => setModalAberto(false)}
-          />
-          
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setModalAberto(false)} />
           <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-10 max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden" />
             
@@ -397,10 +464,7 @@ export default function AulasTab() {
                 <h3 className="text-xl font-black text-slate-800">Nova Aula</h3>
                 <p className="text-sm text-slate-500 mt-0.5">Preencha os dados do aluno</p>
               </div>
-              <button 
-                onClick={() => setModalAberto(false)}
-                className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200"
-              >
+              <button onClick={() => setModalAberto(false)} className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200">
                 <X size={18} />
               </button>
             </div>
@@ -436,27 +500,30 @@ export default function AulasTab() {
                 <input type="text" placeholder="Nome do cliente/grupo" {...register('nome_cliente', { required: true })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500" />
               </div>
 
+              {/* Professores - AGORA É OPCIONAL */}
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><GraduationCap size={13}/> Professores</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><GraduationCap size={13}/> Equipa</label>
+                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Opcional</span>
+                </div>
                 {listaProfessores.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">Nenhum professor cadastrado ainda.</p>
+                  <p className="text-xs text-slate-400 italic">Nenhum professor registado ainda.</p>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
                     {listaProfessores.map(nome => {
                       const sel = professores.includes(nome)
                       return (
-                        <label key={nome} className={`flex items-center gap-2 border rounded-xl px-3 py-2.5 cursor-pointer transition-all ${sel ? 'border-pink-500 bg-pink-50' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}>
+                        <label key={nome} className={`flex items-center gap-2 border rounded-xl px-3 py-2.5 cursor-pointer transition-all ${sel ? 'border-pink-500 bg-pink-50 shadow-sm' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}>
                           <input type="checkbox" className="sr-only" checked={sel} onChange={() => toggleProfessor(nome)} />
                           <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${sel ? 'bg-pink-600 border-pink-600' : 'border-slate-300'}`}>
                             {sel && <CheckCircle size={10} className="text-white" />}
                           </div>
-                          <span className={`text-sm font-bold truncate ${sel ? 'text-pink-700' : 'text-slate-600'}`}>{nome}</span>
+                          <span className={`text-sm font-bold truncate ${sel ? 'text-pink-700' : 'text-slate-600'}`}>{nome.split(' ')[0]}</span>
                         </label>
                       )
                     })}
                   </div>
                 )}
-                {professorError && <p className="text-red-500 text-xs mt-1">Selecione ao menos um professor.</p>}
               </div>
 
               {pacotes.length > 0 && (
@@ -516,7 +583,7 @@ export default function AulasTab() {
                 className="w-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-bold py-4 rounded-xl text-lg mt-2 shadow-[0_4px_14px_rgba(232,67,106,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {salvando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={20} />}
-                {salvando ? 'Salvando...' : 'Salvar Aula'}
+                {salvando ? 'A Guardar...' : 'Guardar Aula'}
               </button>
             </form>
           </div>
