@@ -31,7 +31,8 @@ const DADOS_VAZIOS: DadosFinanceiros = {
 }
 
 export default function FinanceiroTab() {
-  const [periodo, setPeriodo] = useState<Periodo>('mes')
+  // A aba "tudo" agora é o padrão ao abrir
+  const [periodo, setPeriodo] = useState<Periodo>('tudo')
   const [dados, setDados] = useState<DadosFinanceiros>(DADOS_VAZIOS)
   const [breakdownCategorias, setBreakdownCategorias] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -99,17 +100,17 @@ export default function FinanceiroTab() {
   return (
     <div className="px-4 py-2 flex flex-col gap-6">
 
-      {/* HEADER PREMIUM (Subindo do fundo escuro) */}
+      {/* HEADER PREMIUM (Subindo do fundo escuro) - TÍTULO AGORA BRANCO */}
       <div className="flex items-center justify-between -mt-2">
         <div>
-          <h2 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
-            <BarChart2 size={20} className="text-pink-600" />
+          <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2 drop-shadow-md">
+            <BarChart2 size={22} className="text-pink-400" />
             Dashboard
           </h2>
         </div>
         <button
           onClick={() => fetchDados(periodo)}
-          className="w-10 h-10 bg-white rounded-full shadow-sm border border-slate-100 flex items-center justify-center text-slate-400 hover:text-pink-600 hover:bg-pink-50 transition-colors"
+          className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
           title="Atualizar"
         >
           <RefreshCw size={18} />
@@ -117,7 +118,7 @@ export default function FinanceiroTab() {
       </div>
 
       {/* SELETOR DE PERÍODO (Pílulas) */}
-      <div className="bg-white rounded-[16px] p-1.5 shadow-sm border border-slate-100 flex gap-1">
+      <div className="bg-white/90 backdrop-blur-sm rounded-[16px] p-1.5 shadow-sm border border-slate-100 flex gap-1">
         {PERIODOS.map(({ id, label }) => (
           <button
             key={id}
@@ -125,7 +126,7 @@ export default function FinanceiroTab() {
             className={`flex-1 py-2.5 rounded-[12px] text-[11px] uppercase tracking-wider font-bold transition-all ${
               periodo === id
                 ? 'bg-slate-800 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
             }`}
           >
             {label}
@@ -260,7 +261,8 @@ export default function FinanceiroTab() {
                         </div>
                       </div>
                     )
-                  })}
+                  })
+                }
               </div>
             </div>
           )}
