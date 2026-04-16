@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Users, UserPlus, Trash2, DollarSign } from 'lucide-react'
+import { Users, UserPlus, Trash2, DollarSign, CheckCircle } from 'lucide-react'
 
 // Interface atualizada para suportar a taxa por aula
 interface Professor {
@@ -73,9 +73,9 @@ export default function ProfessoresTab() {
   }
 
   return (
-    <div className="px-4 py-2 flex flex-col gap-6">
+    <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
       
-      {/* HEADER PREMIUM (Título ajustado para Branco) */}
+      {/* HEADER PREMIUM (Título ajustado para Branco Brilhante) */}
       <div className="flex items-center gap-2 -mt-2">
         <Users size={22} className="text-pink-400 drop-shadow-md" />
         <h2 className="text-xl font-black text-white tracking-tight drop-shadow-md">Equipe de Professores</h2>
