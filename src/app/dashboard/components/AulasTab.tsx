@@ -79,11 +79,9 @@ export default function AulasTab() {
   )
 
   const carregarDadosBase = useCallback(async () => {
-    // Carrega Professores
     const { data: profs } = await supabase.from('professores').select('nome').order('nome', { ascending: true })
     if (profs) setListaProfessores(profs.map(p => p.nome))
 
-    // Carrega Alunos para o Autocompletar
     const { data: alunos } = await supabase.from('alunos').select('id, nome').order('nome', { ascending: true })
     if (alunos) setAlunosCadastrados(alunos)
   }, [])
@@ -392,7 +390,8 @@ export default function AulasTab() {
     <>
       <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
 
-        <div className="flex gap-3 -mt-6">
+        {/* ALINHAMENTO CORRIGIDO: Removido o -mt-6 e colocado -mt-2 para alinhar com o cabeçalho */}
+        <div className="flex gap-3 -mt-2">
           <div className="flex-[1.2] bg-gradient-to-br from-pink-500 to-rose-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(232,67,106,0.3)] relative overflow-hidden">
             <span className="text-[32px] font-black text-white leading-none">{aulasHoje.length}</span>
             <span className="text-[11px] font-medium text-white/80 mt-1">Aulas hoje</span>
@@ -492,7 +491,6 @@ export default function AulasTab() {
             style={{ transform: `translateY(${dragOffset}px)` }}
           >
             
-            {/* Puxador */}
             <div 
               className="w-full pb-6 pt-2 -mt-4 flex justify-center cursor-grab active:cursor-grabbing"
               onTouchStart={handleTouchStart}
@@ -551,7 +549,6 @@ export default function AulasTab() {
                 </div>
               </div>
 
-              {/* CRM INTELIGENTE: CAMPO DE ALUNO COM AUTOCOMPLETAR */}
               <div className="relative">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><User size={13}/> Aluno Principal</label>
                 <input 
