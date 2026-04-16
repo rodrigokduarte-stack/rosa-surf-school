@@ -6,7 +6,7 @@ import { Periodo, formatarValor, parseProfessores, getRange } from '@/lib/dateUt
 import { 
   TrendingUp, TrendingDown, DollarSign, Clock, Users, BarChart2, 
   RefreshCw, GraduationCap, Package, Tag, Wallet, Activity, 
-  ArrowUpRight, ArrowDownRight, CreditCard, Landmark, Banknote, HelpCircle 
+  ArrowUpRight, ArrowDownRight, CreditCard, Landmark, Banknote, HelpCircle, Download
 } from 'lucide-react'
 import AcertoProfessores from './AcertoProfessores'
 
@@ -34,7 +34,6 @@ const DADOS_VAZIOS: DadosFinanceiros = {
   receitaPacotes: 0, inadimplenciaPacotes: 0, aulasARealizar: 0,
 }
 
-// Mapeamento de ícones para formas de pagamento
 const ICONES_PAGAMENTO: Record<string, any> = {
   'Pix': Landmark,
   'Cartão de Crédito': CreditCard,
@@ -78,7 +77,6 @@ export default function FinanceiroTab() {
       return acc
     }, {} as Record<string, number>)
 
-    // Cálculo das Despesas por Categoria
     setBreakdownCategorias(
       custosList.reduce((acc, c) => {
         const cat = (c.categoria as string) || 'Outros'
@@ -87,12 +85,10 @@ export default function FinanceiroTab() {
       }, {} as Record<string, number>)
     )
 
-    // CÁLCULO DAS FORMAS DE PAGAMENTO
     const pagamentosMap: Record<string, number> = {}
     aulasList.forEach(a => {
       if (a.status_pagamento === 'Pago' || a.status_pagamento === 'Parcial') {
         const forma = a.forma_pagamento || 'Não informado'
-        // Se for Parcial, usa o valor_pago, se for Pago, usa o valor_aula (ou valor_pago se preenchido)
         const valorEfetivo = a.status_pagamento === 'Parcial' ? Number(a.valor_pago || 0) : Number(a.valor_aula || a.valor_pago || 0)
         
         if (valorEfetivo > 0) {
@@ -132,7 +128,7 @@ export default function FinanceiroTab() {
   const margem = dados.faturamentoBruto > 0 ? Math.round((lucroLiquido / dados.faturamentoBruto) * 100) : 0
 
   return (
-    <div className="px-4 py-2 flex flex-col gap-6">
+    <div className="px-4 py-2 flex flex-col gap-6" id="relatorio-financeiro">
 
       <div className="flex items-center justify-between -mt-2">
         <div>
@@ -141,16 +137,34 @@ export default function FinanceiroTab() {
             Dashboard
           </h2>
         </div>
-        <button
-          onClick={() => fetchDados(periodo)}
-          className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
-          title="Atualizar"
-        >
-          <RefreshCw size={18} />
-        </button>
+        
+        {/* BOTÕES ESCONDIDOS NA IMPRESSÃO (print:hidden) */}
+        <div className="flex items-center gap-2 print:hidden">
+          <button
+            onClick={() => window.print()}
+            className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+            title="Exportar PDF"
+          >
+            <Download size={18} />
+          </button>
+          <button
+            onClick={() => fetchDados(periodo)}
+            className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+            title="Atualizar"
+          >
+            <RefreshCw size={18} />
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white/90 backdrop-blur-sm rounded-[16px] p-1.5 shadow-sm border border-slate-100 flex gap-1">
+      {/* TÍTULO EXCLUSIVO PARA O PDF (Escondido na tela normal) */}
+      <div className="hidden print:block text-center mb-4 border-b pb-4">
+        <h1 className="text-2xl font-black text-slate-800">Rosa Surf School</h1>
+        <p className="text-slate-500">Relatório Financeiro: {labelPeriodo}</p>
+      </div>
+
+      {/* SELETOR ESCONDIDO NA IMPRESSÃO */}
+      <div className="bg-white/90 backdrop-blur-sm rounded-[16px] p-1.5 shadow-sm border border-slate-100 flex gap-1 print:hidden">
         {PERIODOS.map(({ id, label }) => (
           <button
             key={id}
@@ -165,29 +179,28 @@ export default function FinanceiroTab() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <div className="flex flex-col items-center justify-center py-20 gap-3 print:hidden">
           <div className="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
         <div className="flex flex-col gap-5">
 
-          {/* CARD DE LUCRO LÍQUIDO */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-[24px] p-6 shadow-xl relative overflow-hidden">
-            <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/stardust.png")' }} />
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-[24px] p-6 shadow-xl relative overflow-hidden print:bg-none print:bg-white print:border print:border-slate-200 print:shadow-none print:text-slate-800">
+            <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay print:hidden" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/stardust.png")' }} />
             <div className="relative z-10">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Wallet size={16} className="text-slate-400" />
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Lucro Líquido ({labelPeriodo})</span>
+                  <Wallet size={16} className="text-slate-400 print:text-slate-500" />
+                  <span className="text-[11px] font-bold text-slate-400 print:text-slate-500 uppercase tracking-widest">Lucro Líquido ({labelPeriodo})</span>
                 </div>
               </div>
               <div className="flex items-end gap-3 mb-2">
-                <span className={`text-4xl font-black tracking-tighter ${lucroLiquido >= 0 ? 'text-white' : 'text-rose-400'}`}>
+                <span className={`text-4xl font-black tracking-tighter ${lucroLiquido >= 0 ? 'text-white print:text-slate-800' : 'text-rose-400 print:text-rose-600'}`}>
                   {formatarValor(lucroLiquido)}
                 </span>
               </div>
               <div className="flex items-center gap-2 mt-4">
-                <div className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${lucroLiquido >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                <div className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${lucroLiquido >= 0 ? 'bg-emerald-500/20 text-emerald-400 print:bg-emerald-100 print:text-emerald-700' : 'bg-rose-500/20 text-rose-400 print:bg-rose-100 print:text-rose-700'}`}>
                   <Activity size={12} />
                   {margem}% Margem
                 </div>
@@ -197,28 +210,28 @@ export default function FinanceiroTab() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+            <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] print:shadow-none print:border-slate-200">
               <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center mb-3">
                 <ArrowUpRight size={16} className="text-emerald-600" />
               </div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Faturado</span>
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.faturamentoBruto)}</span>
             </div>
-            <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+            <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] print:shadow-none print:border-slate-200">
               <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center mb-3">
                 <Clock size={16} className="text-amber-600" />
               </div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">A Receber</span>
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.aReceber)}</span>
             </div>
-            <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+            <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] print:shadow-none print:border-slate-200">
               <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                 <Users size={16} className="text-slate-600" />
               </div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Professores</span>
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.custoProfessores)}</span>
             </div>
-            <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+            <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] print:shadow-none print:border-slate-200">
               <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center mb-3">
                 <ArrowDownRight size={16} className="text-rose-600" />
               </div>
@@ -227,11 +240,16 @@ export default function FinanceiroTab() {
             </div>
           </div>
 
-          {/* NOVA SEÇÃO: FORMAS DE PAGAMENTO */}
+          {dados.totalAulas > 0 && (
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest text-center mt-2">
+              Baseado em {dados.totalAulas} aula{dados.totalAulas !== 1 ? 's' : ''} concluídas
+            </p>
+          )}
+
           {Object.keys(breakdownPagamentos).length > 0 && (
             <div className="mt-2">
               <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" /> Como o dinheiro entrou?
+                <span className="w-2 h-2 rounded-full bg-emerald-500 print:hidden" /> Como o dinheiro entrou?
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 {Object.entries(breakdownPagamentos)
@@ -239,12 +257,12 @@ export default function FinanceiroTab() {
                   .map(([forma, total]) => {
                     const Icone = ICONES_PAGAMENTO[forma] || HelpCircle
                     return (
-                      <div key={forma} className="bg-white rounded-[20px] border border-slate-100 p-4 shadow-sm">
+                      <div key={forma} className="bg-white rounded-[20px] border border-slate-100 p-4 shadow-sm print:shadow-none print:border-slate-200">
                         <div className="flex items-center gap-2 mb-2">
-                          <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
-                            <Icone size={14} />
+                          <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 print:bg-transparent print:w-auto print:h-auto">
+                            <Icone size={14} className="print:hidden" />
                           </div>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">{forma}</span>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate print:text-slate-600">{forma}</span>
                         </div>
                         <span className="text-lg font-black text-slate-800 tracking-tight">{formatarValor(total)}</span>
                       </div>
@@ -254,13 +272,12 @@ export default function FinanceiroTab() {
             </div>
           )}
 
-          {/* SEÇÃO: DESPESAS POR CATEGORIA */}
           {Object.keys(breakdownCategorias).length > 0 && (
             <div className="mt-2">
               <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full bg-rose-500" /> Onde o dinheiro foi?
+                <span className="w-2 h-2 rounded-full bg-rose-500 print:hidden" /> Onde o dinheiro foi?
               </h3>
-              <div className="bg-white rounded-[20px] shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-100 p-4 flex flex-col gap-4">
+              <div className="bg-white rounded-[20px] shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-100 p-4 flex flex-col gap-4 print:shadow-none print:border-slate-200">
                 {Object.entries(breakdownCategorias)
                   .sort(([, a], [, b]) => b - a)
                   .map(([cat, total], i, arr) => {
@@ -272,7 +289,7 @@ export default function FinanceiroTab() {
                           <span className="text-xs font-bold text-slate-600">{cat}</span>
                           <span className="text-xs font-black text-slate-800">{formatarValor(total)}</span>
                         </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2">
+                        <div className="w-full bg-slate-100 rounded-full h-2 print:hidden">
                           <div
                             className="bg-gradient-to-r from-pink-400 to-rose-500 h-2 rounded-full transition-all duration-1000"
                             style={{ width: `${pct}%` }}
@@ -285,32 +302,11 @@ export default function FinanceiroTab() {
             </div>
           )}
 
-          {/* SEÇÃO: CONTROLE DE PACOTES */}
           <div className="mt-2">
             <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
-              <span className="w-2 h-2 rounded-full bg-pink-500" /> Controle de Pacotes
+              <span className="w-2 h-2 rounded-full bg-pink-500 print:hidden" /> Acerto com a Equipe
             </h3>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-white rounded-[16px] p-3 shadow-sm border border-slate-100 text-center flex flex-col justify-center">
-                <span className="text-sm font-black text-emerald-600">{formatarValor(dados.receitaPacotes)}</span>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Receita</span>
-              </div>
-              <div className="bg-white rounded-[16px] p-3 shadow-sm border border-slate-100 text-center flex flex-col justify-center">
-                <span className="text-sm font-black text-rose-600">{formatarValor(dados.inadimplenciaPacotes)}</span>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Dívida</span>
-              </div>
-              <div className="bg-white rounded-[16px] p-3 shadow-sm border border-slate-100 text-center flex flex-col justify-center bg-slate-50">
-                <span className="text-sm font-black text-slate-800">{dados.aulasARealizar}</span>
-                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">A Dar</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-2">
-            <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
-              <span className="w-2 h-2 rounded-full bg-pink-500" /> Acerto com a Equipe
-            </h3>
-            <div className="bg-white rounded-[20px] shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-100 p-2">
+            <div className="bg-white rounded-[20px] shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-100 p-2 print:shadow-none print:border-slate-200 print:p-0">
               <AcertoProfessores periodo={periodo} />
             </div>
           </div>
