@@ -31,7 +31,6 @@ const DADOS_VAZIOS: DadosFinanceiros = {
 }
 
 export default function FinanceiroTab() {
-  // A aba "tudo" agora é o padrão ao abrir
   const [periodo, setPeriodo] = useState<Periodo>('tudo')
   const [dados, setDados] = useState<DadosFinanceiros>(DADOS_VAZIOS)
   const [breakdownCategorias, setBreakdownCategorias] = useState<Record<string, number>>({})
@@ -52,12 +51,22 @@ export default function FinanceiroTab() {
     if (fim) custosQ = custosQ.lte('data_custo', fim)
 
     const pacotesQ = supabase.from('pacotes').select('valor_total, valor_pago, aulas_restantes')
+    
+    // Nova busca: Tabela de Professores
+    const profsQ = supabase.from('professores').select('nome, valor_aula')
 
-    const [{ data: aulas }, { data: custos }, { data: pacotes }] = await Promise.all([aulasQ, custosQ, pacotesQ])
+    const [{ data: aulas }, { data: custos }, { data: pacotes }, { data: profs }] = await Promise.all([aulasQ, custosQ, pacotesQ, profsQ])
 
     const aulasList = aulas ?? []
     const custosList = custos ?? []
     const pacotesList = pacotes ?? []
+    const profsList = profs ?? []
+
+    // Dicionário ágil para consultar o valor de cada professor
+    const profsMap = profsList.reduce((acc, prof) => {
+      acc[prof.nome] = Number(prof.valor_aula) || 100
+      return acc
+    }, {} as Record<string, number>)
 
     setBreakdownCategorias(
       custosList.reduce((acc, c) => {
@@ -74,11 +83,18 @@ export default function FinanceiroTab() {
       aReceber: aulasList
         .filter(a => a.status_pagamento === 'Pendente')
         .reduce((s, a) => s + Number(a.valor_aula), 0),
-      // MANTÉM SUA LÓGICA DE MULTIPLICAR POR PROFESSOR
+        
+      // LÓGICA NOVA: Custo Dinâmico de Professores
       custoProfessores: aulasList.reduce((s, a) => {
-        const n = parseProfessores(a.nome_professor).length || 1
-        return s + 100 * n
+        const nomes = parseProfessores(a.nome_professor)
+        // Se a aula ainda não tem professor, joga o custo base de 100 por segurança
+        if (!nomes || nomes.length === 0) return s + 100 
+        
+        // Soma a taxa individual de cada professor que deu essa aula
+        const custoDessaAula = nomes.reduce((soma, nome) => soma + (profsMap[nome] ?? 100), 0)
+        return s + custoDessaAula
       }, 0),
+      
       custosOperacionais: custosList.reduce((s, c) => s + Number(c.valor_custo), 0),
       totalAulas: aulasList.length,
       receitaPacotes: pacotesList.reduce((s, p) => s + Number(p.valor_pago), 0),
@@ -100,7 +116,6 @@ export default function FinanceiroTab() {
   return (
     <div className="px-4 py-2 flex flex-col gap-6">
 
-      {/* HEADER PREMIUM (Subindo do fundo escuro) - TÍTULO AGORA BRANCO */}
       <div className="flex items-center justify-between -mt-2">
         <div>
           <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2 drop-shadow-md">
@@ -117,7 +132,6 @@ export default function FinanceiroTab() {
         </button>
       </div>
 
-      {/* SELETOR DE PERÍODO (Pílulas) */}
       <div className="bg-white/90 backdrop-blur-sm rounded-[16px] p-1.5 shadow-sm border border-slate-100 flex gap-1">
         {PERIODOS.map(({ id, label }) => (
           <button
@@ -141,7 +155,6 @@ export default function FinanceiroTab() {
       ) : (
         <div className="flex flex-col gap-5">
 
-          {/* CARD PRINCIPAL DE LUCRO (NUBANK STYLE) */}
           <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-[24px] p-6 shadow-xl relative overflow-hidden">
             <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/stardust.png")' }} />
             
@@ -169,9 +182,7 @@ export default function FinanceiroTab() {
             </div>
           </div>
 
-          {/* CARDS DE ENTRADA, PENDENTE E SAÍDA */}
           <div className="grid grid-cols-2 gap-3">
-            {/* Faturamento */}
             <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
               <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center mb-3">
                 <ArrowUpRight size={16} className="text-emerald-600" />
@@ -180,7 +191,6 @@ export default function FinanceiroTab() {
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.faturamentoBruto)}</span>
             </div>
 
-            {/* A Receber */}
             <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
               <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center mb-3">
                 <Clock size={16} className="text-amber-600" />
@@ -189,7 +199,6 @@ export default function FinanceiroTab() {
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.aReceber)}</span>
             </div>
 
-            {/* Custo Profs */}
             <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
               <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                 <Users size={16} className="text-slate-600" />
@@ -198,7 +207,6 @@ export default function FinanceiroTab() {
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.custoProfessores)}</span>
             </div>
 
-            {/* Custo Operacional */}
             <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
               <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center mb-3">
                 <ArrowDownRight size={16} className="text-rose-600" />
@@ -214,7 +222,6 @@ export default function FinanceiroTab() {
             </p>
           )}
 
-          {/* PACOTES PREMIUM */}
           <div className="mt-2">
             <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
               <span className="w-2 h-2 rounded-full bg-pink-500" /> Controle de Pacotes
@@ -235,7 +242,6 @@ export default function FinanceiroTab() {
             </div>
           </div>
 
-          {/* DESPESAS POR CATEGORIA (Gráficos Visuais) */}
           {Object.keys(breakdownCategorias).length > 0 && (
             <div className="mt-2">
               <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
@@ -267,7 +273,6 @@ export default function FinanceiroTab() {
             </div>
           )}
 
-          {/* ACERTO COM PROFESSORES (Sua lógica intacta) */}
           <div className="mt-2">
             <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
               <span className="w-2 h-2 rounded-full bg-pink-500" /> Acerto com a Equipe
