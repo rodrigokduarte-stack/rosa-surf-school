@@ -78,7 +78,6 @@ export default function InadimplentesTab() {
 
     pacotesData?.forEach((p: Pacote) => {
       if (Number(p.valor_pago) < Number(p.valor_total)) {
-        // Trava de segurança para a data de criação
         const dataCriacao = p.created_at ? p.created_at.split('T')[0] : hojeEmBrasilia()
         
         lista.push({
@@ -86,7 +85,6 @@ export default function InadimplentesTab() {
           tipo: 'pacote',
           nome: p.nome_cliente,
           descricao: `Pacote (${p.aulas_restantes} restantes)`,
-          // Removida a linha do telefone que estava quebrando o código
           valor_total: Number(p.valor_total),
           valor_pago: Number(p.valor_pago || 0),
           dias_atraso: calcularDiasAtraso(dataCriacao),
@@ -129,132 +127,135 @@ export default function InadimplentesTab() {
   }
 
   function abrirWhatsApp(d: Devedor) {
-    const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}). Podemos acertar? 🏄‍♂️`)
-    const fone = d.telefone?.replace(/\D/g, '') || ''
-    if(fone) window.open(`https://wa.me/55${fone}?text=${texto}`, '_blank')
-    else alert("Cliente sem telefone salvo.")
+    const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}). Podemos acertar? 🏄‍♂️`)
+    
+    // ABRIR O WHATSAPP DIRETO COM O TEXTO PRONTO
+    window.open(`https://wa.me/?text=${texto}`, '_blank')
   }
 
   const totalEmAberto = devedores.reduce((s, d) => s + (d.valor_total - d.valor_pago), 0)
   const criticos = devedores.filter(d => d.dias_atraso >= 30).length
 
   return (
-    <>
-      <div className="px-4 py-2 flex flex-col gap-6">
-        <div className="flex gap-3 -mt-6">
-          <div className="flex-[1.2] bg-gradient-to-br from-rose-500 to-red-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(225,29,72,0.3)] relative overflow-hidden">
-            <span className="text-[26px] font-black text-white leading-tight mt-1">
-              {formatarValor(totalEmAberto)}
-            </span>
-            <span className="text-[11px] font-medium text-white/80 mt-1">Total na rua</span>
-            <Wallet size={80} className="absolute -bottom-4 -right-4 text-white opacity-10" />
-          </div>
-          
-          <div className="flex-1 flex flex-col gap-2.5">
-            <div className="flex-1 bg-white rounded-[16px] p-3 shadow-sm flex flex-col justify-center border border-rose-100">
-              <span className="text-[18px] font-bold text-rose-600 leading-tight">{criticos}</span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Críticos (+30d)</span>
-            </div>
-            <div className="flex-1 bg-white rounded-[16px] p-3 shadow-sm flex flex-col justify-center border border-slate-100">
-              <span className="text-[18px] font-bold text-slate-800 leading-tight">{devedores.length}</span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Inadimplentes</span>
-            </div>
-          </div>
+    <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
+      
+      {/* KPIs Premium - Ajustados para não grudar no header azul escuro */}
+      <div className="flex gap-3">
+        <div className="flex-[1.2] bg-gradient-to-br from-rose-500 to-red-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(225,29,72,0.3)] relative overflow-hidden">
+          <span className="text-[26px] font-black text-white leading-tight mt-1">
+            {formatarValor(totalEmAberto)}
+          </span>
+          <span className="text-[11px] font-medium text-white/80 mt-1">Total na rua</span>
+          <Wallet size={80} className="absolute -bottom-4 -right-4 text-white opacity-10" />
         </div>
-
-        <div>
-          <h2 className="text-[15px] font-bold text-slate-800 flex items-center gap-2 mb-4">
-            <span className="w-2 h-2 rounded-full bg-rose-500" /> Cobranças Ativas
-          </h2>
-
-          {loading ? (
-            <div className="flex justify-center py-10">
-              <div className="w-7 h-7 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : devedores.length === 0 ? (
-            <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
-              <span className="text-4xl mb-3 block">🙌</span>
-              <p className="text-slate-500 font-medium text-sm">Ninguém devendo!</p>
-              <p className="text-slate-400 text-xs mt-1">O caixa está 100% em dia.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {devedores.map(dev => {
-                const cfg = configUrgencia(dev.dias_atraso)
-                const restante = dev.valor_total - dev.valor_pago
-                const pctPago = Math.round((dev.valor_pago / dev.valor_total) * 100)
-                const isOp = expandido === dev.id
-
-                return (
-                  <div key={dev.id} className={`bg-white rounded-[20px] p-4 border shadow-sm transition-all ${cfg.border}`}>
-                    <div className="flex items-start justify-between cursor-pointer" onClick={() => setExpandido(isOp ? null : dev.id)}>
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${cfg.badge}`}>
-                          {dev.nome.substring(0,2).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-slate-800 text-[15px] leading-tight">{dev.nome}</span>
-                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full text-white tracking-wider ${cfg.badge}`}>
-                              {dev.dias_atraso}d • {cfg.label}
-                            </span>
-                          </div>
-                          <span className="text-xs text-slate-500 mt-0.5 block">{dev.descricao}</span>
-                        </div>
-                      </div>
-                      {isOp ? <ChevronUp size={16} className="text-slate-400 mt-1" /> : <ChevronDown size={16} className="text-slate-400 mt-1" />}
-                    </div>
-
-                    <div className="mt-4 mb-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all duration-500 ${cfg.bar}`} style={{ width: `${pctPago}%` }} />
-                    </div>
-                    <div className="flex justify-between items-center mt-1.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        Pago: {formatarValor(dev.valor_pago)}
-                      </span>
-                      <span className={`text-[11px] font-black uppercase tracking-wider ${cfg.text}`}>
-                        Falta: {formatarValor(restante)}
-                      </span>
-                    </div>
-
-                    {isOp && (
-                      <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
-                        <button 
-                          onClick={() => abrirWhatsApp(dev)} 
-                          className="flex-1 bg-emerald-50 text-emerald-600 font-bold text-xs py-2.5 rounded-xl border border-emerald-200 flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
-                        >
-                          <MessageCircle size={14} /> Cobrar
-                        </button>
-                        <button 
-                          onClick={() => { setDevedorSelecionado(dev); setValorRecebido(restante.toString()) }} 
-                          className={`flex-[1.5] text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-transform ${cfg.badge}`}
-                        >
-                          <DollarSign size={14} /> Receber Pagamento
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
+        
+        <div className="flex-1 flex flex-col gap-2.5">
+          <div className="flex-1 bg-white rounded-[16px] p-3 shadow-sm flex flex-col justify-center border border-rose-100">
+            <span className="text-[18px] font-bold text-rose-600 leading-tight">{criticos}</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Críticos (+30d)</span>
+          </div>
+          <div className="flex-1 bg-white rounded-[16px] p-3 shadow-sm flex flex-col justify-center border border-slate-100">
+            <span className="text-[18px] font-bold text-slate-800 leading-tight">{devedores.length}</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Inadimplentes</span>
+          </div>
         </div>
       </div>
 
+      <div>
+        <h2 className="text-[15px] font-bold text-slate-800 flex items-center gap-2 mb-4">
+          <span className="w-2 h-2 rounded-full bg-rose-500" /> Máquina de Cobrança
+        </h2>
+
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <div className="w-7 h-7 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : devedores.length === 0 ? (
+          <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
+            <span className="text-4xl mb-3 block">🙌</span>
+            <p className="text-slate-500 font-medium text-sm">Ninguém devendo!</p>
+            <p className="text-slate-400 text-xs mt-1">O caixa está 100% em dia.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {devedores.map(dev => {
+              const cfg = configUrgencia(dev.dias_atraso)
+              const restante = dev.valor_total - dev.valor_pago
+              const pctPago = Math.round((dev.valor_pago / dev.valor_total) * 100)
+              const isOp = expandido === dev.id
+
+              return (
+                <div key={dev.id} className={`bg-white rounded-[20px] p-4 border shadow-sm transition-all ${cfg.border}`}>
+                  <div className="flex items-start justify-between cursor-pointer" onClick={() => setExpandido(isOp ? null : dev.id)}>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner ${cfg.badge}`}>
+                        {dev.nome.substring(0,2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-800 text-[15px] leading-tight">{dev.nome}</span>
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full text-white tracking-wider ${cfg.badge}`}>
+                            {dev.dias_atraso}d • {cfg.label}
+                          </span>
+                        </div>
+                        <span className="text-xs text-slate-500 mt-0.5 block">{dev.descricao}</span>
+                      </div>
+                    </div>
+                    {isOp ? <ChevronUp size={16} className="text-slate-400 mt-1" /> : <ChevronDown size={16} className="text-slate-400 mt-1" />}
+                  </div>
+
+                  <div className="mt-4 mb-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-500 ${cfg.bar}`} style={{ width: `${pctPago}%` }} />
+                  </div>
+                  <div className="flex justify-between items-center mt-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Pago: {formatarValor(dev.valor_pago)}
+                    </span>
+                    <span className={`text-[11px] font-black uppercase tracking-wider ${cfg.text}`}>
+                      Falta: {formatarValor(restante)}
+                    </span>
+                  </div>
+
+                  {isOp && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                      <button 
+                        onClick={() => abrirWhatsApp(dev)} 
+                        className="w-full bg-[#25D366]/10 text-[#075E54] font-black text-[13px] py-3.5 rounded-xl border border-[#25D366]/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                      >
+                        <MessageCircle size={16} /> 
+                        Enviar Cobrança no WhatsApp
+                      </button>
+                      <button 
+                        onClick={() => { setDevedorSelecionado(dev); setValorRecebido(restante.toString()) }} 
+                        className={`w-full text-white font-black text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-sm ${cfg.badge}`}
+                      >
+                        <DollarSign size={16} /> 
+                        Registrar Recebimento
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* MODAL BOTTOM SHEET: Registrar Pagamento (Blindado Z-Index 60) */}
       {devedorSelecionado && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div 
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" 
             onClick={() => setDevedorSelecionado(null)} 
           />
           
-          <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-10 shadow-2xl">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-5 sm:hidden" />
+          <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-32 shadow-2xl animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] overflow-y-auto">
+            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden" />
             
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
               Registrar Recebimento
             </p>
-            <h3 className="text-2xl font-black text-slate-800 leading-none mb-1">
+            <h3 className="text-2xl font-black text-slate-800 leading-none mb-1 tracking-tight">
               {devedorSelecionado.nome}
             </h3>
             <p className="text-sm text-slate-500 mb-6">
@@ -262,11 +263,11 @@ export default function InadimplentesTab() {
             </p>
 
             <div className="flex gap-3 mb-6">
-              <div className="flex-1 bg-rose-50 border border-rose-200 rounded-2xl p-3 flex flex-col">
+              <div className="flex-1 bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col">
                 <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-0.5">
                   Dívida Total
                 </span>
-                <span className="text-lg font-black text-rose-700">
+                <span className="text-xl font-black text-rose-700 tracking-tight">
                   {formatarValor(devedorSelecionado.valor_total - devedorSelecionado.valor_pago)}
                 </span>
               </div>
@@ -296,14 +297,14 @@ export default function InadimplentesTab() {
                  <button 
                     type="button" 
                     onClick={() => setValorRecebido(((devedorSelecionado.valor_total - devedorSelecionado.valor_pago) / 2).toFixed(2))} 
-                    className="flex-1 bg-slate-50 text-slate-600 font-bold text-xs py-2 rounded-xl border border-slate-200 hover:bg-slate-100"
+                    className="flex-1 bg-slate-50 text-slate-600 font-bold text-sm py-3 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors"
                   >
                     Metade (50%)
                   </button>
                  <button 
                     type="button" 
                     onClick={() => setValorRecebido((devedorSelecionado.valor_total - devedorSelecionado.valor_pago).toString())} 
-                    className="flex-1 bg-emerald-50 text-emerald-600 font-bold text-xs py-2 rounded-xl border border-emerald-200 hover:bg-emerald-100"
+                    className="flex-1 bg-emerald-50 text-emerald-600 font-bold text-sm py-3 rounded-xl border border-emerald-200 hover:bg-emerald-100 transition-colors"
                   >
                     Quitar Tudo
                   </button>
@@ -312,7 +313,7 @@ export default function InadimplentesTab() {
               <button
                 type="submit"
                 disabled={processando}
-                className="w-full bg-emerald-500 text-white font-black py-4 rounded-xl text-lg mt-2 shadow-[0_4px_14px_rgba(16,185,129,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-black py-5 rounded-xl text-lg mt-4 shadow-[0_4px_14px_rgba(16,185,129,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {processando ? (
                   <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -325,7 +326,7 @@ export default function InadimplentesTab() {
               <button 
                 type="button" 
                 onClick={() => setDevedorSelecionado(null)} 
-                className="w-full py-2 text-sm font-bold text-slate-400 hover:text-slate-600"
+                className="w-full py-3 text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors mt-2"
               >
                 Cancelar
               </button>
@@ -333,6 +334,6 @@ export default function InadimplentesTab() {
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }
