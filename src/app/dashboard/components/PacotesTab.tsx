@@ -65,8 +65,8 @@ export default function PacotesTab() {
   return (
     <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
 
-      {/* Faixa de KPIs (Margem ajustada para não engolir o título abaixo) */}
-      <div className="flex gap-3">
+      {/* Faixa de KPIs alinhada com as outras abas */}
+      <div className="flex gap-3 -mt-2">
         <div className="flex-[1.2] bg-gradient-to-br from-pink-500 to-rose-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(232,67,106,0.3)] relative overflow-hidden">
           <span className="text-[32px] font-black text-white leading-none">{ativos.length}</span>
           <span className="text-[11px] font-medium text-white/80 mt-1">Pacotes ativos</span>
@@ -82,8 +82,9 @@ export default function PacotesTab() {
 
       {/* Lista de pacotes ativos */}
       <div>
-        <h2 className="text-[15px] font-bold text-slate-800 flex items-center gap-2 mb-4">
-          <span className="w-2 h-2 rounded-full bg-pink-500" />
+        {/* TÍTULO CORRIGIDO PARA BRANCO */}
+        <h2 className="text-lg font-black text-white drop-shadow-md flex items-center gap-2 mb-4 tracking-tight">
+          <span className="w-2.5 h-2.5 rounded-full bg-pink-400 shadow-[0_0_8px_rgba(244,114,182,0.6)]" />
           Pacotes em Andamento
         </h2>
 
