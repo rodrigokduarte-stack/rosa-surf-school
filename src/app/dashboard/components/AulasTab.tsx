@@ -53,7 +53,7 @@ export default function AulasTab() {
   const [pacoteSelecionado, setPacoteSelecionado] = useState<string>('')
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
-  // ESTADOS DO NOVO AUTOCOMPLETAR DE ALUNOS
+  // ESTADOS DO AUTOCOMPLETAR
   const [alunosCadastrados, setAlunosCadastrados] = useState<{id: string, nome: string}[]>([])
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false)
 
@@ -72,10 +72,9 @@ export default function AulasTab() {
   const statusPagamento = watch('status_pagamento')
   const nomeClienteAtual = watch('nome_cliente') || ''
 
-  // Filtra as sugestões baseado no que está sendo digitado
   const sugestoesAlunos = alunosCadastrados.filter(a => 
     a.nome.toLowerCase().includes(nomeClienteAtual.toLowerCase()) &&
-    a.nome.toLowerCase() !== nomeClienteAtual.toLowerCase() // Esconde se já for exatamente igual
+    a.nome.toLowerCase() !== nomeClienteAtual.toLowerCase() 
   )
 
   const carregarDadosBase = useCallback(async () => {
@@ -149,12 +148,24 @@ export default function AulasTab() {
   async function onSubmit(dados: FormData) {
     setSalvando(true)
 
+    // LÓGICA DE CADASTRO INVISÍVEL DE ALUNO
+    const nomeDigitado = dados.nome_cliente.trim()
+    const alunoJaExiste = alunosCadastrados.some(a => a.nome.toLowerCase() === nomeDigitado.toLowerCase())
+    
+    if (!alunoJaExiste && nomeDigitado.length > 0) {
+      // Salva silenciosamente no banco de alunos
+      await supabase.from('alunos').insert([{ nome: nomeDigitado }])
+      // Recarrega a base para o autocompletar já saber dele na próxima vez
+      carregarDadosBase() 
+    }
+
     let valorFinalPago = 0
     if (dados.status_pagamento === 'Pago') valorFinalPago = Number(dados.valor_aula)
     else if (dados.status_pagamento === 'Parcial') valorFinalPago = Number(dados.valor_pago) || 0
 
     const payload = {
       ...dados,
+      nome_cliente: nomeDigitado, // Salva sem espaços sobrando
       nome_professor: professores,
       pacote_id: pacoteSelecionado || null,
       valor_pago: valorFinalPago
@@ -390,7 +401,6 @@ export default function AulasTab() {
     <>
       <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
 
-        {/* ALINHAMENTO CORRIGIDO: Removido o -mt-6 e colocado -mt-2 para alinhar com o cabeçalho */}
         <div className="flex gap-3 -mt-2">
           <div className="flex-[1.2] bg-gradient-to-br from-pink-500 to-rose-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(232,67,106,0.3)] relative overflow-hidden">
             <span className="text-[32px] font-black text-white leading-none">{aulasHoje.length}</span>
