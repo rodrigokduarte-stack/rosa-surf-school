@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Users, UserPlus, Trash2, DollarSign, CheckCircle } from 'lucide-react'
 
-// Interface atualizada para suportar a taxa por aula
 interface Professor {
   id: string
   nome: string
@@ -16,9 +15,8 @@ export default function ProfessoresTab() {
   const [professores, setProfessores] = useState<Professor[]>([])
   const [loading, setLoading] = useState(true)
   
-  // Estados do Formulário
   const [novoNome, setNovoNome] = useState('')
-  const [novoValor, setNovoValor] = useState<number | string>(100) // Padrão R$ 100
+  const [novoValor, setNovoValor] = useState<number | string>(100) 
   
   const [salvando, setSalvando] = useState(false)
   const [excluindo, setExcluindo] = useState<string | null>(null)
@@ -28,6 +26,7 @@ export default function ProfessoresTab() {
     const { data } = await supabase
       .from('professores')
       .select('*')
+      .eq('ativo', true) // <-- LÓGICA NOVA: Puxa só quem está ativo!
       .order('nome', { ascending: true })
     
     setProfessores(data ?? [])
@@ -45,25 +44,26 @@ export default function ProfessoresTab() {
 
     const { error } = await supabase
       .from('professores')
-      .insert([{ nome: novoNome.trim(), valor_aula: taxa }])
+      .insert([{ nome: novoNome.trim(), valor_aula: taxa, ativo: true }])
 
     if (!error) {
       setNovoNome('')
-      setNovoValor(100) // Reseta para o padrão
+      setNovoValor(100) 
       carregarProfessores()
     } else {
-      alert('Erro ao adicionar professor. Talvez esse nome já exista ou a coluna "valor_aula" não foi criada no Supabase.')
+      alert('Erro ao adicionar professor. O nome já existe ou a coluna "ativo" não foi criada no Supabase.')
     }
     setSalvando(false)
   }
 
+  // LÓGICA NOVA: ARQUIVAR EM VEZ DE DELETAR
   async function excluirProfessor(id: string, nome: string) {
-    if (!window.confirm(`Tem certeza que deseja remover ${nome} da equipe?`)) return
+    if (!window.confirm(`Tem certeza que deseja remover ${nome} da equipe ativa? O histórico dele será mantido nas finanças.`)) return
 
     setExcluindo(id)
     const { error } = await supabase
       .from('professores')
-      .delete()
+      .update({ ativo: false }) // <-- Apenas inativa o professor
       .eq('id', id)
 
     if (!error) {
@@ -75,13 +75,11 @@ export default function ProfessoresTab() {
   return (
     <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
       
-      {/* HEADER PREMIUM (Título ajustado para Branco Brilhante) */}
       <div className="flex items-center gap-2 -mt-2">
         <Users size={22} className="text-pink-400 drop-shadow-md" />
         <h2 className="text-xl font-black text-white tracking-tight drop-shadow-md">Equipe de Professores</h2>
       </div>
 
-      {/* Formulário de Adição de Professor (Modo Card) */}
       <form onSubmit={adicionarProfessor} className="bg-white rounded-[24px] shadow-sm p-5 border border-slate-100 flex flex-col gap-4">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center">
@@ -138,7 +136,6 @@ export default function ProfessoresTab() {
         </div>
       </form>
 
-      {/* Lista de Professores Cadastrados */}
       <div>
         <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
           <span className="w-2 h-2 rounded-full bg-pink-500" /> Elenco Atual
@@ -152,7 +149,7 @@ export default function ProfessoresTab() {
           <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
             <span className="text-4xl mb-3 block">🏄‍♂️</span>
             <p className="text-slate-500 font-medium text-sm">Escola vazia.</p>
-            <p className="text-slate-400 text-xs mt-1">Nenhum professor cadastrado ainda.</p>
+            <p className="text-slate-400 text-xs mt-1">Nenhum professor ativo no momento.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -177,7 +174,7 @@ export default function ProfessoresTab() {
                   onClick={() => excluirProfessor(prof.id, prof.nome)}
                   disabled={excluindo === prof.id}
                   className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors shrink-0"
-                  title="Remover Professor"
+                  title="Arquivar Professor"
                 >
                   {excluindo === prof.id ? (
                     <span className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
