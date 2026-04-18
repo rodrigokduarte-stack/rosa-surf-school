@@ -62,7 +62,8 @@ export default function FinanceiroTab() {
     if (inicio) custosQ = custosQ.gte('data_custo', inicio)
     if (fim) custosQ = custosQ.lte('data_custo', fim)
 
-    const pacotesQ = supabase.from('pacotes').select('valor_total, valor_pago, aulas_restantes')
+    // Adicionado 'forma_pagamento' na busca dos pacotes
+    const pacotesQ = supabase.from('pacotes').select('valor_total, valor_pago, aulas_restantes, forma_pagamento')
     const profsQ = supabase.from('professores').select('nome, valor_aula')
 
     const [{ data: aulas }, { data: custos }, { data: pacotes }, { data: profs }] = await Promise.all([aulasQ, custosQ, pacotesQ, profsQ])
@@ -85,7 +86,10 @@ export default function FinanceiroTab() {
       }, {} as Record<string, number>)
     )
 
+    // LÓGICA CORRIGIDA: SOMA AULAS + PACOTES NO CAIXA
     const pagamentosMap: Record<string, number> = {}
+    
+    // 1. Dinheiro das Aulas Avulsas
     aulasList.forEach(a => {
       if (a.status_pagamento === 'Pago' || a.status_pagamento === 'Parcial') {
         const forma = a.forma_pagamento || 'Não informado'
@@ -96,6 +100,16 @@ export default function FinanceiroTab() {
         }
       }
     })
+
+    // 2. Dinheiro dos Pacotes (Novo!)
+    pacotesList.forEach(p => {
+      const valorPagoPacote = Number(p.valor_pago || 0)
+      if (valorPagoPacote > 0) {
+        const forma = (p as any).forma_pagamento || 'Não informado'
+        pagamentosMap[forma] = (pagamentosMap[forma] ?? 0) + valorPagoPacote
+      }
+    })
+
     setBreakdownPagamentos(pagamentosMap)
 
     setDados({
@@ -138,7 +152,6 @@ export default function FinanceiroTab() {
           </h2>
         </div>
         
-        {/* BOTÕES ESCONDIDOS NA IMPRESSÃO (print:hidden) */}
         <div className="flex items-center gap-2 print:hidden">
           <button
             onClick={() => window.print()}
@@ -157,13 +170,11 @@ export default function FinanceiroTab() {
         </div>
       </div>
 
-      {/* TÍTULO EXCLUSIVO PARA O PDF (Escondido na tela normal) */}
       <div className="hidden print:block text-center mb-4 border-b pb-4">
         <h1 className="text-2xl font-black text-slate-800">Rosa Surf School</h1>
         <p className="text-slate-500">Relatório Financeiro: {labelPeriodo}</p>
       </div>
 
-      {/* SELETOR ESCONDIDO NA IMPRESSÃO */}
       <div className="bg-white/90 backdrop-blur-sm rounded-[16px] p-1.5 shadow-sm border border-slate-100 flex gap-1 print:hidden">
         {PERIODOS.map(({ id, label }) => (
           <button

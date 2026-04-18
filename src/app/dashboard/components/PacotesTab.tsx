@@ -3,23 +3,32 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { supabase } from '@/lib/supabase'
-import { Pacote, NovoPacote } from '@/types'
+import { Pacote } from '@/types'
 import { formatarValor } from '@/lib/dateUtils'
 import {
-  Plus, Package, User, DollarSign, CheckCircle, X, Layers
+  Plus, Package, User, DollarSign, CheckCircle, X, Layers, CreditCard
 } from 'lucide-react'
+
+// Criamos uma interface local para aceitar o novo campo
+interface NovoPacoteForm {
+  nome_cliente: string
+  total_aulas: number
+  valor_total: number
+  valor_pago?: number
+  forma_pagamento?: string
+}
+
+const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
 
 export default function PacotesTab() {
   const [pacotes, setPacotes] = useState<Pacote[]>([])
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [finalizando, setFinalizando] = useState<string | null>(null)
-  
-  // Controle do Modal
   const [modalAberto, setModalAberto] = useState(false)
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<NovoPacote>({
-    defaultValues: { status: 'Ativo', aulas_restantes: 0, valor_pago: 0 },
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<NovoPacoteForm>({
+    defaultValues: { total_aulas: 0, valor_total: 0, valor_pago: 0 },
   })
 
   const carregarPacotes = useCallback(async () => {
@@ -34,20 +43,25 @@ export default function PacotesTab() {
 
   useEffect(() => { carregarPacotes() }, [carregarPacotes])
 
-  async function onSubmit(dados: NovoPacote) {
+  async function onSubmit(dados: NovoPacoteForm) {
     setSalvando(true)
     const payload = {
-      ...dados,
+      nome_cliente: dados.nome_cliente,
+      total_aulas: dados.total_aulas,
       aulas_restantes: dados.total_aulas,
-      status: 'Ativo' as const,
+      valor_total: dados.valor_total,
       valor_pago: dados.valor_pago ?? 0,
+      forma_pagamento: dados.forma_pagamento || null,
+      status: 'Ativo' as const,
     }
     const { error } = await supabase.from('pacotes').insert([payload])
     setSalvando(false)
     if (!error) {
-      reset({ status: 'Ativo', aulas_restantes: 0, valor_pago: 0 })
+      reset({ total_aulas: 0, valor_total: 0, valor_pago: 0 })
       carregarPacotes()
-      setModalAberto(false) // Fecha o modal após salvar
+      setModalAberto(false) 
+    } else {
+      alert("Erro ao salvar. Verificou se a coluna 'forma_pagamento' foi criada no Supabase?")
     }
   }
 
@@ -65,7 +79,6 @@ export default function PacotesTab() {
   return (
     <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
 
-      {/* Faixa de KPIs alinhada com as outras abas */}
       <div className="flex gap-3 -mt-2">
         <div className="flex-[1.2] bg-gradient-to-br from-pink-500 to-rose-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(232,67,106,0.3)] relative overflow-hidden">
           <span className="text-[32px] font-black text-white leading-none">{ativos.length}</span>
@@ -80,9 +93,7 @@ export default function PacotesTab() {
         </div>
       </div>
 
-      {/* Lista de pacotes ativos */}
       <div>
-        {/* TÍTULO CORRIGIDO PARA BRANCO */}
         <h2 className="text-lg font-black text-white drop-shadow-md flex items-center gap-2 mb-4 tracking-tight">
           <span className="w-2.5 h-2.5 rounded-full bg-pink-400 shadow-[0_0_8px_rgba(244,114,182,0.6)]" />
           Pacotes em Andamento
@@ -101,9 +112,7 @@ export default function PacotesTab() {
         ) : (
           <div className="flex flex-col gap-3">
             {ativos.map(pacote => {
-              const progresso = pacote.total_aulas > 0
-                ? ((pacote.total_aulas - pacote.aulas_restantes) / pacote.total_aulas) * 100
-                : 0
+              const progresso = pacote.total_aulas > 0 ? ((pacote.total_aulas - pacote.aulas_restantes) / pacote.total_aulas) * 100 : 0
               const saldo = pacote.valor_total - pacote.valor_pago
 
               return (
@@ -119,18 +128,13 @@ export default function PacotesTab() {
                       onClick={() => finalizarPacote(pacote.id)}
                       disabled={finalizando === pacote.id}
                       className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors shrink-0"
-                      title="Finalizar pacote"
                     >
                       {finalizando === pacote.id ? <span className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <X size={16} strokeWidth={3} />}
                     </button>
                   </div>
 
-                  {/* Barra de progresso */}
                   <div className="w-full bg-slate-100 rounded-full h-1.5 mb-4 overflow-hidden">
-                    <div
-                      className="bg-pink-500 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${progresso}%` }}
-                    />
+                    <div className="bg-pink-500 h-full rounded-full transition-all duration-500" style={{ width: `${progresso}%` }} />
                   </div>
 
                   <div className="flex items-center justify-between text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -142,6 +146,12 @@ export default function PacotesTab() {
                       <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                         Pago: <span className="text-emerald-600">{formatarValor(pacote.valor_pago)}</span> / {formatarValor(pacote.valor_total)}
                       </p>
+                      {/* Mostra a forma de pagamento se existir no banco (para pacotes novos) */}
+                      {(pacote as any).forma_pagamento && (
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                          via {(pacote as any).forma_pagamento}
+                        </p>
+                      )}
                       {saldo > 0 && (
                         <p className="text-xs text-amber-600 font-black mt-0.5">Saldo: {formatarValor(saldo)}</p>
                       )}
@@ -154,7 +164,6 @@ export default function PacotesTab() {
         )}
       </div>
 
-      {/* Pacotes finalizados */}
       {finalizados.length > 0 && (
         <div className="mt-4">
           <h2 className="text-[13px] font-bold text-slate-400 flex items-center gap-2 mb-4 uppercase tracking-widest">
@@ -176,7 +185,6 @@ export default function PacotesTab() {
         </div>
       )}
 
-      {/* FAB - Botão Flutuante (Rosa) */}
       <button
         onClick={() => setModalAberto(true)}
         className="fixed bottom-[88px] right-5 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-[0_4px_20px_rgba(232,67,106,0.45)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40"
@@ -184,13 +192,9 @@ export default function PacotesTab() {
         <Plus size={28} strokeWidth={2.5} />
       </button>
 
-      {/* MODAL BOTTOM SHEET: Novo Pacote */}
       {modalAberto && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
-          <div 
-            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity"
-            onClick={() => setModalAberto(false)}
-          />
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" onClick={() => setModalAberto(false)} />
           
           <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-32 max-h-[90vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom-full duration-300">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden" />
@@ -200,10 +204,7 @@ export default function PacotesTab() {
                 <h3 className="text-xl font-black text-slate-800">Novo Pacote</h3>
                 <p className="text-sm text-slate-500 mt-0.5">Venda de plano de aulas</p>
               </div>
-              <button 
-                onClick={() => setModalAberto(false)}
-                className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"
-              >
+              <button onClick={() => setModalAberto(false)} className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -256,6 +257,18 @@ export default function PacotesTab() {
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
                   />
                 </div>
+              </div>
+
+              {/* NOVO CAMPO DE FORMA DE PAGAMENTO */}
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><CreditCard size={14} /> Meio de Pagamento</label>
+                <select
+                  {...register('forma_pagamento')}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
+                >
+                  <option value="">Não informado</option>
+                  {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
               </div>
 
               <button
