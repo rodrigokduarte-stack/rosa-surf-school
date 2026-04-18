@@ -13,8 +13,9 @@ import {
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
 
+// Atualizado para reconhecer o pacote_id na hora de excluir
 type FormData = Omit<NovaAula, 'nome_professor' | 'pacote_id'> & { valor_pago?: number }
-type AulaComPagamento = RegistroAula & { valor_pago?: number }
+type AulaComPagamento = RegistroAula & { valor_pago?: number, pacote_id?: string | null }
 
 function formatarDataHeader(dataStr: string) {
   const [ano, mes, dia] = dataStr.split('-')
@@ -53,7 +54,6 @@ export default function AulasTab() {
   const [pacoteSelecionado, setPacoteSelecionado] = useState<string>('')
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
-  // ESTADOS DO AUTOCOMPLETAR
   const [alunosCadastrados, setAlunosCadastrados] = useState<{id: string, nome: string}[]>([])
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false)
 
@@ -78,7 +78,11 @@ export default function AulasTab() {
   )
 
   const carregarDadosBase = useCallback(async () => {
-    const { data: profs } = await supabase.from('professores').select('nome').order('nome', { ascending: true })
+    const { data: profs } = await supabase
+      .from('professores')
+      .select('nome')
+      .eq('ativo', true) 
+      .order('nome', { ascending: true })
     if (profs) setListaProfessores(profs.map(p => p.nome))
 
     const { data: alunos } = await supabase.from('alunos').select('id, nome').order('nome', { ascending: true })
@@ -121,14 +125,34 @@ export default function AulasTab() {
     carregarAulas(); carregarPacotes(); carregarDadosBase();
   }, [carregarAulas, carregarPacotes, carregarDadosBase])
 
-  async function excluirAula(id: string, nomeCliente: string) {
-    if (!window.confirm(`Excluir a aula de "${nomeCliente}"?`)) return
-    setExcluindo(id)
-    const { error } = await supabase.from('registro_aulas').delete().eq('id', id)
+  // LÓGICA DO PASSO 3: DEVOLVER CRÉDITOS DO PACOTE
+  async function excluirAula(aula: AulaComPagamento) {
+    if (!window.confirm(`Excluir a aula de "${aula.nome_cliente}"?`)) return
+    setExcluindo(aula.id)
+
+    // Se a aula foi debitada de um pacote, devolvemos a aula pra ele!
+    if (aula.pacote_id) {
+      const { data: pacoteAtual } = await supabase
+        .from('pacotes')
+        .select('aulas_restantes')
+        .eq('id', aula.pacote_id)
+        .single()
+
+      if (pacoteAtual) {
+        await supabase.from('pacotes').update({
+          aulas_restantes: pacoteAtual.aulas_restantes + 1,
+          status: 'Ativo' // Ressuscita o pacote se ele estava finalizado
+        }).eq('id', aula.pacote_id)
+      }
+    }
+
+    const { error } = await supabase.from('registro_aulas').delete().eq('id', aula.id)
+    
     setExcluindo(null)
     if (!error) {
-      setAulasHoje(prev => prev.filter(a => a.id !== id))
-      setAulasProgramadas(prev => prev.filter(a => a.id !== id))
+      setAulasHoje(prev => prev.filter(a => a.id !== aula.id))
+      setAulasProgramadas(prev => prev.filter(a => a.id !== aula.id))
+      carregarPacotes() // Atualiza os pacotes na tela para refletir o estorno
     }
   }
 
@@ -148,14 +172,11 @@ export default function AulasTab() {
   async function onSubmit(dados: FormData) {
     setSalvando(true)
 
-    // LÓGICA DE CADASTRO INVISÍVEL DE ALUNO
     const nomeDigitado = dados.nome_cliente.trim()
     const alunoJaExiste = alunosCadastrados.some(a => a.nome.toLowerCase() === nomeDigitado.toLowerCase())
     
     if (!alunoJaExiste && nomeDigitado.length > 0) {
-      // Salva silenciosamente no banco de alunos
       await supabase.from('alunos').insert([{ nome: nomeDigitado }])
-      // Recarrega a base para o autocompletar já saber dele na próxima vez
       carregarDadosBase() 
     }
 
@@ -165,7 +186,7 @@ export default function AulasTab() {
 
     const payload = {
       ...dados,
-      nome_cliente: nomeDigitado, // Salva sem espaços sobrando
+      nome_cliente: nomeDigitado,
       nome_professor: professores,
       pacote_id: pacoteSelecionado || null,
       valor_pago: valorFinalPago
@@ -382,8 +403,9 @@ export default function AulasTab() {
             </div>
 
             <div className="flex gap-2">
+              {/* O botão agora envia o objeto 'aula' inteiro para a função */}
               <button 
-                onClick={() => excluirAula(aula.id, aula.nome_cliente)}
+                onClick={() => excluirAula(aula)}
                 disabled={excluindo === aula.id}
                 className="flex-1 bg-red-50 border border-red-200 text-red-600 font-bold text-xs py-2.5 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5"
               >
@@ -491,7 +513,6 @@ export default function AulasTab() {
         <Plus size={28} strokeWidth={2.5} />
       </button>
 
-      {/* MODAL BOTTOM SHEET */}
       {modalAberto && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" onClick={() => setModalAberto(false)} />
@@ -595,7 +616,7 @@ export default function AulasTab() {
                   <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Opcional</span>
                 </div>
                 {listaProfessores.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">Nenhum professor registrado ainda.</p>
+                  <p className="text-xs text-slate-400 italic">Nenhum professor ativo encontrado.</p>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
                     {listaProfessores.map(nome => {
