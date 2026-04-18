@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { 
   Waves, BookOpen, Receipt, BarChart2, 
-  AlertCircle, Package, FileText, Menu, Users 
+  AlertCircle, Package, FileText, Menu, Users, UserSquare 
 } from 'lucide-react'
 import AulasTab from './components/AulasTab'
 import DespesasTab from './components/DespesasTab'
@@ -14,8 +14,10 @@ import InadimplentesTab from './components/InadimplentesTab'
 import PacotesTab from './components/PacotesTab'
 import TermosTab from './components/TermosTab'
 import ProfessoresTab from './components/ProfessoresTab'
+import AlunosTab from './components/AlunosTab' // <- Nossa nova aba importada aqui!
 
-type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos' | 'professores'
+// Adicionei 'alunos' na lista de abas permitidas
+type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos' | 'professores' | 'alunos'
 
 const MAIN_NAV: { id: Tab; icon: React.ElementType; label: string }[] = [
   { id: 'aulas',      icon: BookOpen,  label: 'Agenda' },
@@ -71,6 +73,9 @@ export default function DashboardPage() {
     setIsMenuOpen(false)
   }
 
+  // Lista de abas que ficam dentro do menu "Hambúrguer"
+  const menuTabs = ['pendentes', 'termos', 'professores', 'alunos']
+
   return (
     <div className="min-h-screen bg-[#f5f3ef] flex flex-col relative font-sans selection:bg-pink-200 overflow-x-hidden">
 
@@ -110,6 +115,7 @@ export default function DashboardPage() {
         {tab === 'pacotes'     && <PacotesTab />}
         {tab === 'termos'      && <TermosTab />}
         {tab === 'professores' && <ProfessoresTab />}
+        {tab === 'alunos'      && <AlunosTab />}  {/* Renderiza a aba nova */}
       </main>
 
       {/* Dropdown Menu Flutuante "Mais" */}
@@ -120,6 +126,15 @@ export default function DashboardPage() {
             onClick={() => setIsMenuOpen(false)} 
           />
           <div className="fixed bottom-24 right-4 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden w-48 py-2 animate-in fade-in slide-in-from-bottom-4">
+            
+            {/* NOVO BOTÃO DE ALUNOS AQUI */}
+            <button 
+              onClick={() => changeTab('alunos')} 
+              className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'alunos' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
+            >
+              <UserSquare size={18} /> <span className="text-sm font-semibold">Alunos</span>
+            </button>
+
             <button 
               onClick={() => changeTab('pendentes')} 
               className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'pendentes' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
@@ -160,7 +175,6 @@ export default function DashboardPage() {
               <span className={`text-[10px] font-semibold transition-colors duration-200 ${active ? 'text-pink-600' : 'text-slate-400'}`}>
                 {label}
               </span>
-              {/* Bolinha indicadora de aba ativa */}
               {active && (
                 <div className="absolute -bottom-0.5 w-1 h-1 rounded-full bg-pink-600" />
               )}
@@ -175,13 +189,13 @@ export default function DashboardPage() {
         >
           <Menu 
             size={22} 
-            strokeWidth={isMenuOpen || ['pendentes', 'termos', 'professores'].includes(tab) ? 2.5 : 2} 
-            className={`transition-colors duration-200 ${isMenuOpen || ['pendentes', 'termos', 'professores'].includes(tab) ? 'text-pink-600' : 'text-slate-400'}`} 
+            strokeWidth={isMenuOpen || menuTabs.includes(tab) ? 2.5 : 2} 
+            className={`transition-colors duration-200 ${isMenuOpen || menuTabs.includes(tab) ? 'text-pink-600' : 'text-slate-400'}`} 
           />
-          <span className={`text-[10px] font-semibold transition-colors duration-200 ${isMenuOpen || ['pendentes', 'termos', 'professores'].includes(tab) ? 'text-pink-600' : 'text-slate-400'}`}>
+          <span className={`text-[10px] font-semibold transition-colors duration-200 ${isMenuOpen || menuTabs.includes(tab) ? 'text-pink-600' : 'text-slate-400'}`}>
             Menu
           </span>
-          {['pendentes', 'termos', 'professores'].includes(tab) && !isMenuOpen && (
+          {menuTabs.includes(tab) && !isMenuOpen && (
             <div className="absolute -bottom-0.5 w-1 h-1 rounded-full bg-pink-600" />
           )}
         </button>
