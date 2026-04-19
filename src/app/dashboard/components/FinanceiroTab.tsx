@@ -109,12 +109,18 @@ export default function FinanceiroTab() {
     setBreakdownPagamentos(pagamentosMap)
 
     setDados({
-      faturamentoBruto: aulasList
-        .filter(a => a.status_pagamento === 'Pago')
-        .reduce((s, a) => s + Number(a.valor_aula), 0),
-      aReceber: aulasList
-        .filter(a => a.status_pagamento === 'Pendente')
-        .reduce((s, a) => s + Number(a.valor_aula), 0),
+      // CORREÇÃO: Faturamento agora considera o que foi pago nas aulas parciais
+      faturamentoBruto: aulasList.reduce((s, a) => {
+        if (a.status_pagamento === 'Pago') return s + Number(a.valor_aula)
+        if (a.status_pagamento === 'Parcial') return s + Number(a.valor_pago || 0)
+        return s
+      }, 0),
+      // CORREÇÃO: A Receber agora considera o que falta das aulas parciais
+      aReceber: aulasList.reduce((s, a) => {
+        if (a.status_pagamento === 'Pendente') return s + Number(a.valor_aula)
+        if (a.status_pagamento === 'Parcial') return s + Math.max(0, Number(a.valor_aula) - Number(a.valor_pago || 0))
+        return s
+      }, 0),
       custoProfessores: aulasList.reduce((s, a) => {
         const nomes = parseProfessores(a.nome_professor)
         if (!nomes || nomes.length === 0) return s + 100 
