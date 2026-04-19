@@ -28,7 +28,6 @@ export default function AlunosTab() {
   const [modalAberto, setModalAberto] = useState(false)
   const [excluindo, setExcluindo] = useState<string | null>(null)
   
-  // Novo estado para saber se estamos editando ou criando
   const [editandoId, setEditandoId] = useState<string | null>(null)
 
   const [nome, setNome] = useState('')
@@ -86,11 +85,9 @@ export default function AlunosTab() {
     let error;
 
     if (editandoId) {
-      // Atualiza o aluno existente
       const { error: updateError } = await supabase.from('alunos').update(payload).eq('id', editandoId)
       error = updateError
     } else {
-      // Cria um novo aluno
       const { error: insertError } = await supabase.from('alunos').insert([payload])
       error = insertError
     }
@@ -133,7 +130,7 @@ export default function AlunosTab() {
               }}
               className="bg-[#25D366] hover:bg-[#1EBE5D] text-white text-[10px] font-bold px-3 py-1.5 rounded-full border border-[#1EBE5D] transition-all flex items-center gap-1.5 shadow-md active:scale-95"
             >
-              <MessageCircle size={14} /> Enviar no Zap
+              <MessageCircle size={14} /> Enviar WhatsApp
             </button>
           </div>
 
