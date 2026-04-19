@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Users, Plus, Trash2, Search, Phone, Calendar, FileText, CheckCircle, X, MessageCircle, AtSign } from 'lucide-react'
+import { Users, Plus, Trash2, Search, Phone, Calendar, FileText, CheckCircle, X, MessageCircle, AtSign, Edit2 } from 'lucide-react'
 
 interface Aluno {
   id: string
@@ -27,6 +27,9 @@ export default function AlunosTab() {
   const [salvando, setSalvando] = useState(false)
   const [modalAberto, setModalAberto] = useState(false)
   const [excluindo, setExcluindo] = useState<string | null>(null)
+  
+  // Novo estado para saber se estamos editando ou criando
+  const [editandoId, setEditandoId] = useState<string | null>(null)
 
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
@@ -46,22 +49,54 @@ export default function AlunosTab() {
 
   useEffect(() => { carregarAlunos() }, [carregarAlunos])
 
+  function abrirModalNovo() {
+    setEditandoId(null)
+    setNome('')
+    setTelefone('')
+    setInstagram('')
+    setDataNascimento('')
+    setObservacoes('')
+    setModalAberto(true)
+  }
+
+  function abrirModalEdicao(aluno: Aluno) {
+    setEditandoId(aluno.id)
+    setNome(aluno.nome)
+    setTelefone(aluno.telefone || '')
+    setInstagram(aluno.instagram || '')
+    setDataNascimento(aluno.data_nascimento || '')
+    setObservacoes(aluno.observacoes || '')
+    setModalAberto(true)
+  }
+
   async function salvarAluno(e: React.FormEvent) {
     e.preventDefault()
     if (!nome.trim()) return
 
     setSalvando(true)
-    const { error } = await supabase.from('alunos').insert([{ 
+    
+    const payload = {
       nome: nome.trim(), 
       telefone: telefone.trim() || null, 
       instagram: instagram.trim() || null,
       data_nascimento: dataNascimento || null, 
       observacoes: observacoes.trim() || null 
-    }])
+    }
+
+    let error;
+
+    if (editandoId) {
+      // Atualiza o aluno existente
+      const { error: updateError } = await supabase.from('alunos').update(payload).eq('id', editandoId)
+      error = updateError
+    } else {
+      // Cria um novo aluno
+      const { error: insertError } = await supabase.from('alunos').insert([payload])
+      error = insertError
+    }
 
     setSalvando(false)
     if (!error) {
-      setNome(''); setTelefone(''); setInstagram(''); setDataNascimento(''); setObservacoes('')
       setModalAberto(false)
       carregarAlunos()
     } else {
@@ -163,13 +198,23 @@ export default function AlunosTab() {
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => excluirAluno(aluno.id, aluno.nome)}
-                    disabled={excluindo === aluno.id}
-                    className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors shrink-0"
-                  >
-                    {excluindo === aluno.id ? <span className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Trash2 size={16} />}
-                  </button>
+                  
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => abrirModalEdicao(aluno)}
+                      className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-full transition-colors shrink-0"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => excluirAluno(aluno.id, aluno.nome)}
+                      disabled={excluindo === aluno.id}
+                      className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors shrink-0"
+                    >
+                      {excluindo === aluno.id ? <span className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Trash2 size={16} />}
+                    </button>
+                  </div>
+
                 </div>
                 
                 {(aluno.data_nascimento || aluno.observacoes) && (
@@ -195,7 +240,7 @@ export default function AlunosTab() {
       </div>
 
       <button
-        onClick={() => setModalAberto(true)}
+        onClick={abrirModalNovo}
         className="fixed bottom-[88px] right-5 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-[0_4px_20px_rgba(232,67,106,0.45)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40"
       >
         <Plus size={28} strokeWidth={2.5} />
@@ -213,7 +258,9 @@ export default function AlunosTab() {
             
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-xl font-black text-slate-800">Novo Aluno</h3>
+                <h3 className="text-xl font-black text-slate-800">
+                  {editandoId ? 'Editar Aluno' : 'Novo Aluno'}
+                </h3>
                 <p className="text-sm text-slate-500 mt-0.5">Ficha de cadastro</p>
               </div>
               <button 
@@ -275,7 +322,7 @@ export default function AlunosTab() {
                 className="w-full bg-slate-800 text-white font-bold py-4 rounded-xl text-lg mt-2 shadow-[0_4px_14px_rgba(0,0,0,0.2)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {salvando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle size={20} />}
-                {salvando ? 'Salvando...' : 'Salvar Cadastro'}
+                {salvando ? 'Salvando...' : editandoId ? 'Atualizar Cadastro' : 'Salvar Cadastro'}
               </button>
             </form>
           </div>
