@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { RegistroAula, Pacote } from '@/types'
 import { formatarValor, hojeEmBrasilia } from '@/lib/dateUtils'
-import { CheckCircle, MessageCircle, ChevronDown, ChevronUp, DollarSign, Wallet } from 'lucide-react'
+import { CheckCircle, MessageCircle, ChevronDown, ChevronUp, DollarSign, Wallet, CreditCard } from 'lucide-react'
 
 type Devedor = {
   id: string
@@ -17,6 +17,8 @@ type Devedor = {
   dias_atraso: number
   original_id: string
 }
+
+const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
 
 function calcularDiasAtraso(dataReferencia: string) {
   const hoje = new Date(hojeEmBrasilia())
@@ -47,6 +49,9 @@ export default function InadimplentesTab() {
   
   const [devedorSelecionado, setDevedorSelecionado] = useState<Devedor | null>(null)
   const [valorRecebido, setValorRecebido] = useState<string>('')
+  
+  // NOVO ESTADO: Forma de pagamento (já vem com Pix como padrão para ser rápido)
+  const [formaPagamento, setFormaPagamento] = useState<string>('Pix')
   const [processando, setProcessando] = useState(false)
 
   const carregarInadimplentes = useCallback(async () => {
@@ -102,34 +107,36 @@ export default function InadimplentesTab() {
 
   async function confirmarPagamento(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!devedorSelecionado || !valorRecebido) return
+    if (!devedorSelecionado || !valorRecebido || !formaPagamento) return
     
     setProcessando(true)
     const valorAdicional = parseFloat(valorRecebido)
     const novoValorPago = devedorSelecionado.valor_pago + valorAdicional
     const quitou = novoValorPago >= devedorSelecionado.valor_total
 
+    // AGORA ATUALIZA TAMBÉM A FORMA DE PAGAMENTO NO BANCO
     if (devedorSelecionado.tipo === 'aula') {
       await supabase.from('registro_aulas').update({ 
         status_pagamento: quitou ? 'Pago' : 'Parcial',
-        valor_pago: quitou ? devedorSelecionado.valor_total : novoValorPago
+        valor_pago: quitou ? devedorSelecionado.valor_total : novoValorPago,
+        forma_pagamento: formaPagamento
       }).eq('id', devedorSelecionado.original_id)
     } else {
       await supabase.from('pacotes').update({ 
-        valor_pago: quitou ? devedorSelecionado.valor_total : novoValorPago
+        valor_pago: quitou ? devedorSelecionado.valor_total : novoValorPago,
+        forma_pagamento: formaPagamento
       }).eq('id', devedorSelecionado.original_id)
     }
 
     setProcessando(false)
     setDevedorSelecionado(null)
     setValorRecebido('')
+    setFormaPagamento('Pix') // Reseta para o padrão
     carregarInadimplentes()
   }
 
   function abrirWhatsApp(d: Devedor) {
-    const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}). Podemos acertar? 🏄‍♂️`)
-    
-    // ABRIR O WHATSAPP DIRETO COM O TEXTO PRONTO
+    const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}). Podemos acertar? 🏄‍♂️`)
     window.open(`https://wa.me/?text=${texto}`, '_blank')
   }
 
@@ -139,7 +146,6 @@ export default function InadimplentesTab() {
   return (
     <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
       
-      {/* KPIs Premium - Ajustados para não grudar no header azul escuro */}
       <div className="flex gap-3">
         <div className="flex-[1.2] bg-gradient-to-br from-rose-500 to-red-600 rounded-[20px] p-4 flex flex-col shadow-[0_4px_20px_rgba(225,29,72,0.3)] relative overflow-hidden">
           <span className="text-[26px] font-black text-white leading-tight mt-1">
@@ -226,7 +232,7 @@ export default function InadimplentesTab() {
                         Enviar Cobrança no WhatsApp
                       </button>
                       <button 
-                        onClick={() => { setDevedorSelecionado(dev); setValorRecebido(restante.toString()) }} 
+                        onClick={() => { setDevedorSelecionado(dev); setValorRecebido(restante.toString()); setFormaPagamento('Pix'); }} 
                         className={`w-full text-white font-black text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-sm ${cfg.badge}`}
                       >
                         <DollarSign size={16} /> 
@@ -241,7 +247,7 @@ export default function InadimplentesTab() {
         )}
       </div>
 
-      {/* MODAL BOTTOM SHEET: Registrar Pagamento (Blindado Z-Index 60) */}
+      {/* MODAL DE RECEBIMENTO MELHORADO */}
       {devedorSelecionado && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div 
@@ -274,6 +280,8 @@ export default function InadimplentesTab() {
             </div>
 
             <form onSubmit={confirmarPagamento} className="flex flex-col gap-4">
+              
+              {/* CAMPO DE VALOR */}
               <div>
                 <label className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 block">
                   Quanto ele pagou agora?
@@ -308,6 +316,22 @@ export default function InadimplentesTab() {
                   >
                     Quitar Tudo
                   </button>
+              </div>
+
+              {/* NOVO CAMPO: FORMA DE PAGAMENTO */}
+              <div>
+                <label className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <CreditCard size={14} /> Como o dinheiro entrou?
+                </label>
+                <select
+                  value={formaPagamento}
+                  onChange={e => setFormaPagamento(e.target.value)}
+                  required
+                  className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3.5 text-base font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-colors"
+                >
+                  <option value="">Selecione...</option>
+                  {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
               </div>
 
               <button
