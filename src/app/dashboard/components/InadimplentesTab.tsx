@@ -6,25 +6,25 @@ import { RegistroAula, Pacote } from '@/types'
 import { formatarValor, hojeEmBrasilia } from '@/lib/dateUtils'
 import { CheckCircle, MessageCircle, ChevronDown, ChevronUp, DollarSign, Wallet, CreditCard, Receipt, Calendar } from 'lucide-react'
 
-type AulaDetalhe = {
-  id: string
-  data_aula: string
-  modalidade: string
-  valor_aula: number
-  valor_pago: number
-}
-
-type Devedor = {
+type ItemDivida = {
   id: string
   tipo: 'aula' | 'pacote'
-  nome: string
   descricao: string
+  data_referencia: string
+  valor_total: number
+  valor_pago: number
+  original_id: string
+  dias_atraso: number
+}
+
+type DevedorAgrupado = {
+  id: string
+  nome: string
   telefone?: string
   valor_total: number
   valor_pago: number
-  dias_atraso: number
-  original_id: string
-  aulas_historico: AulaDetalhe[]
+  dias_atraso: number // Pega o atraso do item mais velho
+  itens: ItemDivida[]
 }
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
@@ -60,11 +60,11 @@ function formatarDataCurta(dataStr: string) {
 }
 
 export default function InadimplentesTab() {
-  const [devedores, setDevedores] = useState<Devedor[]>([])
+  const [devedores, setDevedores] = useState<DevedorAgrupado[]>([])
   const [loading, setLoading] = useState(true)
   const [expandido, setExpandido] = useState<string | null>(null)
   
-  const [devedorSelecionado, setDevedorSelecionado] = useState<Devedor | null>(null)
+  const [devedorSelecionado, setDevedorSelecionado] = useState<DevedorAgrupado | null>(null)
   const [valorRecebido, setValorRecebido] = useState<string>('')
   
   const [formaPagamento, setFormaPagamento] = useState<string>('Pix')
@@ -75,7 +75,6 @@ export default function InadimplentesTab() {
     
     const { data: aulasData } = await supabase.from('registro_aulas').select('*').in('status_pagamento', ['Pendente', 'Parcial'])
     const { data: pacotesData } = await supabase.from('pacotes').select('*')
-    const { data: todasAulas } = await supabase.from('registro_aulas').select('id, data_aula, modalidade, valor_aula, valor_pago, pacote_id, nome_cliente')
     const { data: alunosData } = await supabase.from('alunos').select('nome, telefone')
     
     const telefonesMap: Record<string, string> = {}
@@ -86,88 +85,122 @@ export default function InadimplentesTab() {
       }
     })
 
-    const lista: Devedor[] = []
+    const agrupados: Record<string, DevedorAgrupado> = {}
 
+    // Processa Aulas Avulsas
     aulasData?.forEach((a: RegistroAula & { valor_pago?: number }) => {
       const nomeLimpo = (a.nome_cliente || '').trim()
-      lista.push({
+      if (!nomeLimpo) return
+
+      if (!agrupados[nomeLimpo]) {
+        agrupados[nomeLimpo] = { id: nomeLimpo, nome: nomeLimpo, telefone: telefonesMap[nomeLimpo], valor_total: 0, valor_pago: 0, dias_atraso: 0, itens: [] }
+      }
+
+      const dias = calcularDiasAtraso(a.data_aula)
+      agrupados[nomeLimpo].valor_total += Number(a.valor_aula)
+      agrupados[nomeLimpo].valor_pago += Number(a.valor_pago || 0)
+      agrupados[nomeLimpo].dias_atraso = Math.max(agrupados[nomeLimpo].dias_atraso, dias)
+      
+      agrupados[nomeLimpo].itens.push({
         id: `aula-${a.id}`,
         tipo: 'aula',
-        nome: nomeLimpo,
-        descricao: `${a.modalidade}`,
-        telefone: telefonesMap[nomeLimpo],
+        descricao: `Aula ${a.modalidade}`,
+        data_referencia: a.data_aula,
         valor_total: Number(a.valor_aula),
         valor_pago: Number(a.valor_pago || 0),
-        dias_atraso: calcularDiasAtraso(a.data_aula),
         original_id: a.id,
-        aulas_historico: [{
-          id: a.id,
-          data_aula: a.data_aula,
-          modalidade: a.modalidade,
-          valor_aula: Number(a.valor_aula),
-          valor_pago: Number(a.valor_pago || 0)
-        }]
+        dias_atraso: dias
       })
     })
 
+    // Processa Pacotes Devendo
     pacotesData?.forEach((p: Pacote) => {
       if (Number(p.valor_pago) < Number(p.valor_total)) {
-        const dataCriacao = p.created_at ? p.created_at.split('T')[0] : hojeEmBrasilia()
         const nomeLimpo = (p.nome_cliente || '').trim()
-        
-        const aulasDoPacote = (todasAulas || []).filter((aula: any) => aula.pacote_id === p.id)
-          .map((aula: any) => ({
-            id: aula.id,
-            data_aula: aula.data_aula,
-            modalidade: aula.modalidade,
-            valor_aula: Number(aula.valor_aula),
-            valor_pago: Number(aula.valor_pago)
-          }))
-          .sort((a, b) => new Date(b.data_aula).getTime() - new Date(a.data_aula).getTime())
+        if (!nomeLimpo) return
 
-        lista.push({
+        if (!agrupados[nomeLimpo]) {
+          agrupados[nomeLimpo] = { id: nomeLimpo, nome: nomeLimpo, telefone: telefonesMap[nomeLimpo], valor_total: 0, valor_pago: 0, dias_atraso: 0, itens: [] }
+        }
+
+        const dataCriacao = p.created_at ? p.created_at.split('T')[0] : hojeEmBrasilia()
+        const dias = calcularDiasAtraso(dataCriacao)
+        
+        agrupados[nomeLimpo].valor_total += Number(p.valor_total)
+        agrupados[nomeLimpo].valor_pago += Number(p.valor_pago || 0)
+        agrupados[nomeLimpo].dias_atraso = Math.max(agrupados[nomeLimpo].dias_atraso, dias)
+
+        agrupados[nomeLimpo].itens.push({
           id: `pacote-${p.id}`,
           tipo: 'pacote',
-          nome: nomeLimpo,
           descricao: `Pacote (${p.aulas_restantes} restantes)`,
-          telefone: telefonesMap[nomeLimpo],
+          data_referencia: dataCriacao,
           valor_total: Number(p.valor_total),
           valor_pago: Number(p.valor_pago || 0),
-          dias_atraso: calcularDiasAtraso(dataCriacao),
           original_id: p.id,
-          aulas_historico: aulasDoPacote
+          dias_atraso: dias
         })
       }
     })
 
-    lista.sort((a, b) => b.dias_atraso - a.dias_atraso)
-    setDevedores(lista)
+    const listaFinal = Object.values(agrupados)
+    
+    // Ordena os itens DENTRO do aluno do mais velho para o mais novo
+    listaFinal.forEach(dev => {
+      dev.itens.sort((a, b) => b.dias_atraso - a.dias_atraso)
+    })
+
+    // Ordena a lista de alunos para quem deve há mais tempo aparecer no topo
+    listaFinal.sort((a, b) => b.dias_atraso - a.dias_atraso)
+    
+    setDevedores(listaFinal)
     setLoading(false)
   }, [])
 
   useEffect(() => { carregarInadimplentes() }, [carregarInadimplentes])
 
+  // LÓGICA DE PAGAMENTO INTELIGENTE (FIFO: Abate a dívida mais velha primeiro)
   async function confirmarPagamento(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!devedorSelecionado || !valorRecebido || !formaPagamento) return
     
     setProcessando(true)
-    const valorAdicional = parseFloat(valorRecebido)
-    const novoValorPago = devedorSelecionado.valor_pago + valorAdicional
-    const quitou = novoValorPago >= devedorSelecionado.valor_total
+    let saldoRestante = parseFloat(valorRecebido)
+    
+    const promessasAtualizacao = []
 
-    if (devedorSelecionado.tipo === 'aula') {
-      await supabase.from('registro_aulas').update({ 
-        status_pagamento: quitou ? 'Pago' : 'Parcial',
-        valor_pago: quitou ? devedorSelecionado.valor_total : novoValorPago,
-        forma_pagamento: formaPagamento
-      }).eq('id', devedorSelecionado.original_id)
-    } else {
-      await supabase.from('pacotes').update({ 
-        valor_pago: quitou ? devedorSelecionado.valor_total : novoValorPago,
-        forma_pagamento: formaPagamento
-      }).eq('id', devedorSelecionado.original_id)
+    for (const item of devedorSelecionado.itens) {
+      if (saldoRestante <= 0.001) break // Evita bugs de casas decimais
+
+      const faltaNesteItem = item.valor_total - item.valor_pago
+      
+      if (faltaNesteItem > 0) {
+        const valorAAbater = Math.min(saldoRestante, faltaNesteItem)
+        const novoValorPago = item.valor_pago + valorAAbater
+        const quitouTotalmente = novoValorPago >= item.valor_total
+
+        if (item.tipo === 'aula') {
+          promessasAtualizacao.push(
+            supabase.from('registro_aulas').update({ 
+              status_pagamento: quitouTotalmente ? 'Pago' : 'Parcial',
+              valor_pago: novoValorPago,
+              forma_pagamento: formaPagamento
+            }).eq('id', item.original_id)
+          )
+        } else {
+          promessasAtualizacao.push(
+            supabase.from('pacotes').update({ 
+              valor_pago: novoValorPago,
+              forma_pagamento: formaPagamento
+            }).eq('id', item.original_id)
+          )
+        }
+        
+        saldoRestante -= valorAAbater
+      }
     }
+
+    await Promise.all(promessasAtualizacao)
 
     setProcessando(false)
     setDevedorSelecionado(null)
@@ -176,12 +209,10 @@ export default function InadimplentesTab() {
     carregarInadimplentes()
   }
 
-  function abrirWhatsApp(d: Devedor) {
-    let msgAulas = ''
-    if (d.aulas_historico.length > 0) {
-      msgAulas = `\nRef: ` + d.aulas_historico.map(a => `${formatarDataCurta(a.data_aula)}`).join(', ')
-    }
-    const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}).${msgAulas}\nPodemos acertar? 🏄‍♂️`)
+  function abrirWhatsApp(d: DevedorAgrupado) {
+    // Lista o que ele deve formatado
+    const msgAulas = d.itens.map(i => `${i.descricao} (${formatarDataCurta(i.data_referencia)})`).join(', ')
+    const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente no valor de ${formatarValor(d.valor_total - d.valor_pago)}.\n\nRef: ${msgAulas}\n\nPodemos acertar? 🏄‍♂️`)
     
     if (d.telefone) {
       window.open(`https://wa.me/${d.telefone}?text=${texto}`, '_blank')
@@ -212,7 +243,7 @@ export default function InadimplentesTab() {
           </div>
           <div className="flex-1 bg-white rounded-[16px] p-3 shadow-sm flex flex-col justify-center border border-slate-100">
             <span className="text-[18px] font-bold text-slate-800 leading-tight">{devedores.length}</span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Inadimplentes</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Clientes Devendo</span>
           </div>
         </div>
       </div>
@@ -254,7 +285,7 @@ export default function InadimplentesTab() {
                             {dev.dias_atraso}d • {cfg.label}
                           </span>
                         </div>
-                        <span className="text-xs text-slate-500 mt-0.5 block">{dev.descricao}</span>
+                        <span className="text-xs text-slate-500 mt-0.5 block">{dev.itens.length} pendência(s) agrupada(s)</span>
                       </div>
                     </div>
                     {isOp ? <ChevronUp size={16} className="text-slate-400 mt-1" /> : <ChevronDown size={16} className="text-slate-400 mt-1" />}
@@ -275,26 +306,30 @@ export default function InadimplentesTab() {
                   {isOp && (
                     <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
                       
-                      {dev.aulas_historico.length > 0 && (
-                        <div className="bg-slate-50 rounded-xl p-3 mb-2 border border-slate-100">
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Receipt size={12} className="text-slate-400" />
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Aulas que geraram o saldo</span>
-                          </div>
-                          <div className="flex flex-col gap-1.5">
-                            {dev.aulas_historico.map(aula => (
-                              <div key={aula.id} className="flex justify-between items-center text-xs">
-                                <div className="flex items-center gap-2">
-                                  <div className="bg-white border border-slate-200 text-slate-500 font-bold px-1.5 py-0.5 rounded flex items-center gap-1">
-                                    <Calendar size={10} /> {formatarDataCurta(aula.data_aula)}
-                                  </div>
-                                </div>
-                                <span className="font-semibold text-slate-600">{formatarValor(aula.valor_aula)}</span>
-                              </div>
-                            ))}
-                          </div>
+                      <div className="bg-slate-50 rounded-xl p-3 mb-2 border border-slate-100">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Receipt size={12} className="text-slate-400" />
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Itens desta dívida</span>
                         </div>
-                      )}
+                        <div className="flex flex-col gap-2">
+                          {dev.itens.map(item => (
+                            <div key={item.id} className="flex justify-between items-center bg-white border border-slate-200 p-2 rounded-lg shadow-sm">
+                              <div className="flex items-center gap-2">
+                                <div className="bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded flex items-center gap-1 text-[10px]">
+                                  <Calendar size={10} /> {formatarDataCurta(item.data_referencia)}
+                                </div>
+                                <span className="text-xs font-semibold text-slate-700">{item.descricao}</span>
+                              </div>
+                              <div className="flex flex-col items-end">
+                                <span className="font-bold text-slate-800 text-xs">{formatarValor(item.valor_total)}</span>
+                                {item.valor_pago > 0 && (
+                                  <span className="text-[9px] text-slate-400">Pago: {formatarValor(item.valor_pago)}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
 
                       <button 
                         onClick={() => abrirWhatsApp(dev)} 
@@ -336,13 +371,13 @@ export default function InadimplentesTab() {
               {devedorSelecionado.nome}
             </h3>
             <p className="text-sm text-slate-500 mb-6">
-              {devedorSelecionado.descricao}
+              O valor será abatido das pendências mais antigas primeiro.
             </p>
 
             <div className="flex gap-3 mb-6">
               <div className="flex-1 bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col">
                 <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-0.5">
-                  Dívida Total
+                  Dívida Total Consolidada
                 </span>
                 <span className="text-xl font-black text-rose-700 tracking-tight">
                   {formatarValor(devedorSelecionado.valor_total - devedorSelecionado.valor_pago)}
@@ -354,7 +389,7 @@ export default function InadimplentesTab() {
               
               <div>
                 <label className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 block">
-                  Quanto ele pagou agora?
+                  Quanto o cliente pagou agora?
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R$</span>
