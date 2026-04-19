@@ -4,7 +4,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { RegistroAula, Pacote } from '@/types'
 import { formatarValor, hojeEmBrasilia } from '@/lib/dateUtils'
-import { CheckCircle, MessageCircle, ChevronDown, ChevronUp, DollarSign, Wallet, CreditCard } from 'lucide-react'
+import { CheckCircle, MessageCircle, ChevronDown, ChevronUp, DollarSign, Wallet, CreditCard, Receipt, Calendar } from 'lucide-react'
+
+type AulaDetalhe = {
+  id: string
+  data_aula: string
+  modalidade: string
+  valor_aula: number
+  valor_pago: number
+}
 
 type Devedor = {
   id: string
@@ -16,6 +24,7 @@ type Devedor = {
   valor_pago: number
   dias_atraso: number
   original_id: string
+  aulas_historico: AulaDetalhe[] // Novo campo para guardar o histórico
 }
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
@@ -42,6 +51,14 @@ function configUrgencia(dias: number) {
   }
 }
 
+// Formata a data para dd/mm
+function formatarDataCurta(dataStr: string) {
+  if (!dataStr) return ''
+  const partes = dataStr.split('-')
+  if (partes.length !== 3) return dataStr
+  return `${partes[2]}/${partes[1]}`
+}
+
 export default function InadimplentesTab() {
   const [devedores, setDevedores] = useState<Devedor[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,41 +67,67 @@ export default function InadimplentesTab() {
   const [devedorSelecionado, setDevedorSelecionado] = useState<Devedor | null>(null)
   const [valorRecebido, setValorRecebido] = useState<string>('')
   
-  // NOVO ESTADO: Forma de pagamento (já vem com Pix como padrão para ser rápido)
   const [formaPagamento, setFormaPagamento] = useState<string>('Pix')
   const [processando, setProcessando] = useState(false)
 
   const carregarInadimplentes = useCallback(async () => {
     setLoading(true)
     
+    // Busca Aulas Pendentes
     const { data: aulasData } = await supabase
       .from('registro_aulas')
       .select('*')
       .in('status_pagamento', ['Pendente', 'Parcial'])
       
+    // Busca Pacotes Pendentes
     const { data: pacotesData } = await supabase
       .from('pacotes')
       .select('*')
 
+    // Busca TODO o histórico de aulas para vincular aos pacotes se necessário
+    const { data: todasAulas } = await supabase
+      .from('registro_aulas')
+      .select('id, data_aula, modalidade, valor_aula, valor_pago, pacote_id, nome_cliente')
+
     const lista: Devedor[] = []
 
+    // Processa Aulas Avulsas
     aulasData?.forEach((a: RegistroAula & { valor_pago?: number }) => {
       lista.push({
         id: `aula-${a.id}`,
         tipo: 'aula',
         nome: a.nome_cliente,
-        descricao: `${a.modalidade} (${a.data_aula})`,
+        descricao: `${a.modalidade}`,
         valor_total: Number(a.valor_aula),
         valor_pago: Number(a.valor_pago || 0),
         dias_atraso: calcularDiasAtraso(a.data_aula),
-        original_id: a.id
+        original_id: a.id,
+        aulas_historico: [{ // Para aula avulsa, o histórico é a própria aula
+          id: a.id,
+          data_aula: a.data_aula,
+          modalidade: a.modalidade,
+          valor_aula: Number(a.valor_aula),
+          valor_pago: Number(a.valor_pago || 0)
+        }]
       })
     })
 
+    // Processa Pacotes
     pacotesData?.forEach((p: Pacote) => {
       if (Number(p.valor_pago) < Number(p.valor_total)) {
         const dataCriacao = p.created_at ? p.created_at.split('T')[0] : hojeEmBrasilia()
         
+        // Acha as aulas que esse aluno fez usando esse pacote
+        const aulasDoPacote = (todasAulas || []).filter((aula: any) => aula.pacote_id === p.id)
+          .map((aula: any) => ({
+            id: aula.id,
+            data_aula: aula.data_aula,
+            modalidade: aula.modalidade,
+            valor_aula: Number(aula.valor_aula),
+            valor_pago: Number(aula.valor_pago)
+          }))
+          .sort((a, b) => new Date(b.data_aula).getTime() - new Date(a.data_aula).getTime())
+
         lista.push({
           id: `pacote-${p.id}`,
           tipo: 'pacote',
@@ -93,7 +136,8 @@ export default function InadimplentesTab() {
           valor_total: Number(p.valor_total),
           valor_pago: Number(p.valor_pago || 0),
           dias_atraso: calcularDiasAtraso(dataCriacao),
-          original_id: p.id
+          original_id: p.id,
+          aulas_historico: aulasDoPacote
         })
       }
     })
@@ -114,7 +158,6 @@ export default function InadimplentesTab() {
     const novoValorPago = devedorSelecionado.valor_pago + valorAdicional
     const quitou = novoValorPago >= devedorSelecionado.valor_total
 
-    // AGORA ATUALIZA TAMBÉM A FORMA DE PAGAMENTO NO BANCO
     if (devedorSelecionado.tipo === 'aula') {
       await supabase.from('registro_aulas').update({ 
         status_pagamento: quitou ? 'Pago' : 'Parcial',
@@ -131,12 +174,16 @@ export default function InadimplentesTab() {
     setProcessando(false)
     setDevedorSelecionado(null)
     setValorRecebido('')
-    setFormaPagamento('Pix') // Reseta para o padrão
+    setFormaPagamento('Pix') 
     carregarInadimplentes()
   }
 
   function abrirWhatsApp(d: Devedor) {
-    const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}). Podemos acertar? 🏄‍♂️`)
+    let msgAulas = ''
+    if (d.aulas_historico.length > 0) {
+      msgAulas = `\nRef: ` + d.aulas_historico.map(a => `${formatarDataCurta(a.data_aula)}`).join(', ')
+    }
+    const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}).${msgAulas}\nPodemos acertar? 🏄‍♂️`)
     window.open(`https://wa.me/?text=${texto}`, '_blank')
   }
 
@@ -223,7 +270,30 @@ export default function InadimplentesTab() {
                   </div>
 
                   {isOp && (
-                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
+                      
+                      {/* EXTRATO DA DÍVIDA (SANFONA) */}
+                      {dev.aulas_historico.length > 0 && (
+                        <div className="bg-slate-50 rounded-xl p-3 mb-2 border border-slate-100">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Receipt size={12} className="text-slate-400" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Aulas que geraram o saldo</span>
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            {dev.aulas_historico.map(aula => (
+                              <div key={aula.id} className="flex justify-between items-center text-xs">
+                                <div className="flex items-center gap-2">
+                                  <div className="bg-white border border-slate-200 text-slate-500 font-bold px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <Calendar size={10} /> {formatarDataCurta(aula.data_aula)}
+                                  </div>
+                                </div>
+                                <span className="font-semibold text-slate-600">{formatarValor(aula.valor_aula)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       <button 
                         onClick={() => abrirWhatsApp(dev)} 
                         className="w-full bg-[#25D366]/10 text-[#075E54] font-black text-[13px] py-3.5 rounded-xl border border-[#25D366]/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
@@ -247,7 +317,6 @@ export default function InadimplentesTab() {
         )}
       </div>
 
-      {/* MODAL DE RECEBIMENTO MELHORADO */}
       {devedorSelecionado && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div 
@@ -281,7 +350,6 @@ export default function InadimplentesTab() {
 
             <form onSubmit={confirmarPagamento} className="flex flex-col gap-4">
               
-              {/* CAMPO DE VALOR */}
               <div>
                 <label className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 block">
                   Quanto ele pagou agora?
@@ -318,7 +386,6 @@ export default function InadimplentesTab() {
                   </button>
               </div>
 
-              {/* NOVO CAMPO: FORMA DE PAGAMENTO */}
               <div>
                 <label className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <CreditCard size={14} /> Como o dinheiro entrou?
