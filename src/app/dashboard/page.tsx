@@ -14,9 +14,8 @@ import InadimplentesTab from './components/InadimplentesTab'
 import PacotesTab from './components/PacotesTab'
 import TermosTab from './components/TermosTab'
 import ProfessoresTab from './components/ProfessoresTab'
-import AlunosTab from './components/AlunosTab' // <- Nossa nova aba importada aqui!
+import AlunosTab from './components/AlunosTab'
 
-// Adicionei 'alunos' na lista de abas permitidas
 type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos' | 'professores' | 'alunos'
 
 const MAIN_NAV: { id: Tab; icon: React.ElementType; label: string }[] = [
@@ -34,7 +33,6 @@ export default function DashboardPage() {
   const [checking, setChecking] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
-  // Cálculos da Data de Hoje para o Header
   const hoje = new Date()
   const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const diaSemana = dias[hoje.getDay()]
@@ -46,7 +44,6 @@ export default function DashboardPage() {
       else {
         const email = data.session.user.email ?? ''
         setUserName(email)
-        // Pega as duas primeiras letras do email para o Avatar
         if (email) setInitials(email.substring(0, 2).toUpperCase())
         setChecking(false)
       }
@@ -73,18 +70,14 @@ export default function DashboardPage() {
     setIsMenuOpen(false)
   }
 
-  // Lista de abas que ficam dentro do menu "Hambúrguer"
-  const menuTabs = ['pendentes', 'termos', 'professores', 'alunos']
+  const menuTabs = ['alunos', 'professores', 'pendentes', 'termos']
 
   return (
     <div className="min-h-screen bg-[#f5f3ef] flex flex-col relative font-sans selection:bg-pink-200 overflow-x-hidden">
 
-      {/* Fundo Wave Premium (Fica por trás de tudo) */}
       <div className="absolute top-0 left-0 right-0 h-[240px] bg-gradient-to-br from-[#0a1628] via-[#0e2347] to-[#1a3a6e] rounded-b-[40px] z-0" />
 
-      {/* Header Premium (Agora sem fundo branco, usa o Wave de fundo) */}
       <header className="relative z-10 flex justify-between items-center px-6 pt-8 pb-4">
-        {/* Esquerda: Logo + Data */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-1.5">
             <Waves size={22} className="text-pink-500" />
@@ -96,7 +89,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Direita: Avatar (Logout) */}
         <button
           onClick={handleLogout}
           title={`Logado como ${userName}. Clique para sair.`}
@@ -106,7 +98,6 @@ export default function DashboardPage() {
         </button>
       </header>
 
-      {/* Conteúdo da aba ativa (Sobreposto ao Wave) */}
       <main className="relative z-10 flex-1 pb-24">
         {tab === 'aulas'       && <AulasTab />}
         {tab === 'despesas'    && <DespesasTab />}
@@ -115,10 +106,9 @@ export default function DashboardPage() {
         {tab === 'pacotes'     && <PacotesTab />}
         {tab === 'termos'      && <TermosTab />}
         {tab === 'professores' && <ProfessoresTab />}
-        {tab === 'alunos'      && <AlunosTab />}  {/* Renderiza a aba nova */}
+        {tab === 'alunos'      && <AlunosTab />}
       </main>
 
-      {/* Dropdown Menu Flutuante "Mais" */}
       {isMenuOpen && (
         <>
           <div 
@@ -127,7 +117,7 @@ export default function DashboardPage() {
           />
           <div className="fixed bottom-24 right-4 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden w-48 py-2 animate-in fade-in slide-in-from-bottom-4">
             
-            {/* NOVO BOTÃO DE ALUNOS AQUI */}
+            {/* 1. Alunos */}
             <button 
               onClick={() => changeTab('alunos')} 
               className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'alunos' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
@@ -135,29 +125,34 @@ export default function DashboardPage() {
               <UserSquare size={18} /> <span className="text-sm font-semibold">Alunos</span>
             </button>
 
-            <button 
-              onClick={() => changeTab('pendentes')} 
-              className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'pendentes' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <AlertCircle size={18} /> <span className="text-sm font-semibold">Pendentes</span>
-            </button>
-            <button 
-              onClick={() => changeTab('termos')} 
-              className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'termos' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <FileText size={18} /> <span className="text-sm font-semibold">Termos</span>
-            </button>
+            {/* 2. Professores */}
             <button 
               onClick={() => changeTab('professores')} 
               className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'professores' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
             >
               <Users size={18} /> <span className="text-sm font-semibold">Professores</span>
             </button>
+
+            {/* 3. Pendentes */}
+            <button 
+              onClick={() => changeTab('pendentes')} 
+              className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'pendentes' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
+            >
+              <AlertCircle size={18} /> <span className="text-sm font-semibold">Pendentes</span>
+            </button>
+
+            {/* 4. Termos */}
+            <button 
+              onClick={() => changeTab('termos')} 
+              className={`w-full flex items-center gap-3 px-5 py-3 transition-colors ${tab === 'termos' ? 'text-pink-600 bg-pink-50' : 'text-slate-600 hover:bg-slate-50'}`}
+            >
+              <FileText size={18} /> <span className="text-sm font-semibold">Termos</span>
+            </button>
+
           </div>
         </>
       )}
 
-      {/* Bottom Navigation Bar Estilo App Nativo */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-100 flex h-[72px] px-2 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
         {MAIN_NAV.map(({ id, icon: Icon, label }) => {
           const active = tab === id
@@ -182,7 +177,6 @@ export default function DashboardPage() {
           )
         })}
 
-        {/* Botão Hamburger (Menu Mais) */}
         <button
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           className="flex-1 flex flex-col items-center justify-center gap-1 relative"
