@@ -81,11 +81,19 @@ export default function AlunosTab() {
   return (
     <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
       
-      {/* HEADER */}
-      <div className="flex items-center justify-between -mt-2">
-        <div className="flex items-center gap-2">
-          <Users size={22} className="text-pink-400 drop-shadow-md" />
-          <h2 className="text-xl font-black text-white tracking-tight drop-shadow-md">Base de Alunos</h2>
+      {/* HEADER KPI PREMIUM (Corrige o alinhamento empurrando a tela pra baixo!) */}
+      <div className="flex gap-3 -mt-2">
+        <div className="flex-1 bg-gradient-to-br from-pink-500 to-rose-600 rounded-[20px] p-5 flex flex-col shadow-[0_4px_20px_rgba(232,67,106,0.3)] relative overflow-hidden">
+          <div className="flex items-center gap-2 mb-1">
+            <Users size={16} className="text-white/90" />
+            <h2 className="text-xs font-bold text-white/90 uppercase tracking-widest">Base de Alunos</h2>
+          </div>
+          <span className="text-[36px] font-black text-white leading-none mt-1">{alunos.length}</span>
+          <span className="text-[11px] font-medium text-white/80 mt-1">Alunos cadastrados</span>
+          <div className="mt-3 text-[10px] bg-white/20 px-2.5 py-0.5 rounded-full text-white w-fit font-bold backdrop-blur-md flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> CRM Ativo
+          </div>
+          <Users size={100} className="absolute -bottom-8 -right-4 text-white opacity-10" />
         </div>
       </div>
 
