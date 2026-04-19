@@ -1,35 +1,52 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Periodo, formatarValor, parseProfessores, getRange } from '@/lib/dateUtils'
-import { User, Calculator } from 'lucide-react'
+import { Periodo, getRange, parseProfessores, formatarValor } from '@/lib/dateUtils'
+import { ChevronDown, ChevronRight, User, Calendar, Receipt } from 'lucide-react'
 
-// Estrutura nova: Agrupado direto por professor
-interface AcertoResumo {
-  professor: string
-  numAulas: number
-  total: number
+interface AcertoProfessoresProps {
+  periodo: Periodo
 }
 
-export default function AcertoProfessores({ periodo }: { periodo: Periodo }) {
-  const [resumo, setResumo] = useState<AcertoResumo[]>([])
-  const [loading, setLoading] = useState(true)
+interface AulaDetalhe {
+  id: string
+  data_aula: string
+  nome_cliente: string
+  valor_repasse: number
+}
 
-  async function carregarDados() {
+interface ResumoProfessor {
+  nome: string
+  total: number
+  aulas: AulaDetalhe[]
+}
+
+function formatarDataCurta(dataStr: string) {
+  if (!dataStr) return ''
+  const partes = dataStr.split('-')
+  if (partes.length !== 3) return dataStr
+  return `${partes[2]}/${partes[1]}`
+}
+
+export default function AcertoProfessores({ periodo }: AcertoProfessoresProps) {
+  const [resumo, setResumo] = useState<ResumoProfessor[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expandidoId, setExpandidoId] = useState<string | null>(null)
+
+  const carregarDados = useCallback(async () => {
     setLoading(true)
-    
-    // Pega o período exato (Hoje, Semana, Mês ou Tudo)
     let { inicio, fim } = getRange(periodo)
-    
-    // Se for 'hoje', busca os últimos 3 dias para dar um contexto rápido
+
     if (periodo === 'hoje') {
-      const tresDiasAtras = new Date()
-      tresDiasAtras.setDate(tresDiasAtras.getDate() - 3)
-      inicio = tresDiasAtras.toISOString().split('T')[0]
+        const tresDiasAtras = new Date()
+        tresDiasAtras.setDate(tresDiasAtras.getDate() - 3)
+        inicio = tresDiasAtras.toISOString().split('T')[0]
     }
 
-    let aulasQ = supabase.from('registro_aulas').select('data_aula, nome_professor')
+    let aulasQ = supabase
+      .from('registro_aulas')
+      .select('id, data_aula, nome_cliente, nome_professor')
     if (inicio) aulasQ = aulasQ.gte('data_aula', inicio)
     if (fim) aulasQ = aulasQ.lte('data_aula', fim)
 
@@ -37,82 +54,138 @@ export default function AcertoProfessores({ periodo }: { periodo: Periodo }) {
 
     const [{ data: aulas }, { data: profs }] = await Promise.all([aulasQ, profsQ])
 
+    const aulasList = aulas ?? []
     const profsList = profs ?? []
-    
-    // Mapeia os valores atuais de cada professor
+
     const profsMap = profsList.reduce((acc, prof) => {
       acc[prof.nome] = Number(prof.valor_aula) || 100
       return acc
     }, {} as Record<string, number>)
 
-    // NOVO MOTOR DE AGRUPAMENTO (Agrupa por Professor e não por Data)
-    const map: Record<string, AcertoResumo> = {}
-    
-    for (const aula of aulas ?? []) {
-      const professoresParticipantes = parseProfessores(aula.nome_professor)
-      
-      for (const prof of professoresParticipantes) {
-        if (!map[prof]) {
-          map[prof] = { professor: prof, numAulas: 0, total: 0 }
-        }
-        map[prof].numAulas++
-        map[prof].total += (profsMap[prof] ?? 100) // Puxa a taxa dinâmica
-      }
-    }
+    const agrupamento: Record<string, ResumoProfessor> = {}
 
-    // Ordena do professor que tem mais a receber para o menor
-    const listaOrdenada = Object.values(map).sort((a, b) => b.total - a.total)
-    
-    setResumo(listaOrdenada)
+    aulasList.forEach(aula => {
+      const nomesProfs = parseProfessores(aula.nome_professor)
+      if (!nomesProfs || nomesProfs.length === 0) return
+
+      nomesProfs.forEach(nome => {
+        const valorRepasse = profsMap[nome] ?? 100
+
+        if (!agrupamento[nome]) {
+          agrupamento[nome] = { nome, total: 0, aulas: [] }
+        }
+
+        agrupamento[nome].total += valorRepasse
+        agrupamento[nome].aulas.push({
+          id: aula.id,
+          data_aula: aula.data_aula,
+          nome_cliente: aula.nome_cliente || 'Aluno não informado',
+          valor_repasse: valorRepasse
+        })
+      })
+    })
+
+    const resultadoFinal = Object.values(agrupamento).sort((a, b) => b.total - a.total)
+
+    resultadoFinal.forEach(prof => {
+      prof.aulas.sort((a, b) => new Date(b.data_aula).getTime() - new Date(a.data_aula).getTime())
+    })
+
+    setResumo(resultadoFinal)
     setLoading(false)
+  }, [periodo])
+
+  useEffect(() => {
+    carregarDados()
+  }, [carregarDados])
+
+  function toggleExpandir(nomeProf: string) {
+    if (expandidoId === nomeProf) {
+      setExpandidoId(null)
+    } else {
+      setExpandidoId(nomeProf)
+    }
   }
 
-  useEffect(() => { carregarDados() }, [periodo])
+  if (loading) {
+    return (
+      <div className="flex justify-center py-6">
+        <div className="w-5 h-5 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
 
-  const totalPeriodo = resumo.reduce((s, r) => s + r.total, 0)
-
-  if (loading) return <div className="py-6 animate-pulse text-center text-slate-400 text-sm">Calculando repasses...</div>
+  if (resumo.length === 0) {
+    return (
+      <div className="p-6 text-center text-slate-400 text-sm font-medium">
+        Nenhuma aula para repasse neste período.
+      </div>
+    )
+  }
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Banner de Total */}
-      {totalPeriodo > 0 && (
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 flex items-center justify-between print:bg-transparent print:border-none print:px-0">
-          <div className="flex flex-col">
-            <span className="text-xs text-slate-600 font-bold uppercase tracking-wider">Total a Repassar</span>
-            <span className="text-sm text-slate-500">{periodo === 'hoje' ? 'Últimos 3 dias' : 'No período selecionado'}</span>
-          </div>
-          <span className="font-black text-slate-800 text-lg">{formatarValor(totalPeriodo)}</span>
-        </div>
-      )}
+    <div className="flex flex-col">
+      {resumo.map((prof, index) => {
+        const isExpanded = expandidoId === prof.nome
+        const isUltimo = index === resumo.length - 1
 
-      {resumo.length === 0 ? (
-        <div className="bg-white rounded-2xl p-6 shadow-sm text-center text-slate-400 text-sm border border-slate-100 print:shadow-none print:border-slate-200">
-          Nenhuma aula registrada neste período para repasse.
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden print:shadow-none print:border-slate-200">
-          <div className="flex items-center gap-2 px-4 py-3 bg-slate-50/50 border-b border-slate-100 print:bg-slate-100">
-            <Calculator size={14} className="text-slate-400" />
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Resumo Consolidado</span>
-          </div>
-          
-          <div className="divide-y divide-slate-50">
-            {resumo.map(item => (
-              <div key={item.professor} className="flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50/50 transition-colors">
-                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-sm shrink-0 print:border print:border-slate-200">
-                  {item.professor.substring(0,2).toUpperCase()}
+        return (
+          <div key={prof.nome} className={`flex flex-col ${!isUltimo ? 'border-b border-slate-100' : ''}`}>
+            
+            <button 
+              onClick={() => toggleExpandir(prof.nome)}
+              className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 w-full text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors ${isExpanded ? 'bg-pink-100 text-pink-600' : 'bg-slate-100 text-slate-500'}`}>
+                   {prof.nome.substring(0,2).toUpperCase()}
                 </div>
-                <div className="flex-1">
-                  <p className="font-bold text-slate-800 text-[15px] leading-tight">{item.professor}</p>
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">{item.numAulas} aula(s) dadas</p>
+                <div>
+                  <h4 className="font-bold text-slate-800 leading-tight">{prof.nome}</h4>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 block">
+                    {prof.aulas.length} aula{prof.aulas.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
-                <span className="font-black text-slate-700 text-base">{formatarValor(item.total)}</span>
               </div>
-            ))}
+              
+              <div className="flex items-center gap-3">
+                <span className="text-base font-black text-slate-800 tracking-tight">
+                  {formatarValor(prof.total)}
+                </span>
+                <div className="text-slate-300">
+                  {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                </div>
+              </div>
+            </button>
+
+            {isExpanded && (
+              <div className="bg-slate-50 border-t border-slate-100 px-4 py-3 flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Receipt size={12} className="text-slate-400" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Extrato de Aulas</span>
+                </div>
+                
+                {prof.aulas.map((aula, i) => (
+                  <div key={aula.id + i} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-sm">
+                    <div className="flex items-center gap-2.5">
+                      <div className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-md flex items-center gap-1">
+                        <Calendar size={10} /> {formatarDataCurta(aula.data_aula)}
+                      </div>
+                      <span className="text-xs font-semibold text-slate-700 truncate max-w-[120px]">
+                        {aula.nome_cliente}
+                      </span>
+                    </div>
+                    <span className="text-xs font-black text-slate-600">
+                      {formatarValor(aula.valor_repasse)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            
           </div>
-        </div>
-      )}
+        )
+      })}
     </div>
   )
 }
