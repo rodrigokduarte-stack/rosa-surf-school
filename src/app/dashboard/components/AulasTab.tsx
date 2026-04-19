@@ -13,7 +13,6 @@ import {
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
 
-// Atualizado para reconhecer o pacote_id na hora de excluir
 type FormData = Omit<NovaAula, 'nome_professor' | 'pacote_id'> & { valor_pago?: number }
 type AulaComPagamento = RegistroAula & { valor_pago?: number, pacote_id?: string | null }
 
@@ -78,6 +77,7 @@ export default function AulasTab() {
   )
 
   const carregarDadosBase = useCallback(async () => {
+    // 1. Professores
     const { data: profs } = await supabase
       .from('professores')
       .select('nome')
@@ -85,8 +85,28 @@ export default function AulasTab() {
       .order('nome', { ascending: true })
     if (profs) setListaProfessores(profs.map(p => p.nome))
 
-    const { data: alunos } = await supabase.from('alunos').select('id, nome').order('nome', { ascending: true })
-    if (alunos) setAlunosCadastrados(alunos)
+    // 2. MOTOR HÍBRIDO: Puxa do CRM e do Histórico do Passado
+    const { data: alunosCRM } = await supabase.from('alunos').select('nome')
+    const { data: historicoAulas } = await supabase.from('registro_aulas').select('nome_cliente')
+    const { data: historicoPacotes } = await supabase.from('pacotes').select('nome_cliente')
+
+    // Junta tudo num Set (que já remove os nomes duplicados automaticamente)
+    const nomesSet = new Set<string>()
+    
+    alunosCRM?.forEach(a => { if (a.nome) nomesSet.add(a.nome.trim()) })
+    historicoAulas?.forEach(a => { if (a.nome_cliente) nomesSet.add(a.nome_cliente.trim()) })
+    historicoPacotes?.forEach(p => { if (p.nome_cliente) nomesSet.add(p.nome_cliente.trim()) })
+
+    // Transforma de volta em lista para o Autocompletar ler
+    const listaUnica = Array.from(nomesSet).map((nome, index) => ({
+      id: `auto-${index}`,
+      nome: nome
+    }))
+    
+    // Organiza em ordem alfabética
+    listaUnica.sort((a, b) => a.nome.localeCompare(b.nome))
+
+    setAlunosCadastrados(listaUnica)
   }, [])
 
   const carregarAulas = useCallback(async () => {
@@ -125,12 +145,10 @@ export default function AulasTab() {
     carregarAulas(); carregarPacotes(); carregarDadosBase();
   }, [carregarAulas, carregarPacotes, carregarDadosBase])
 
-  // LÓGICA DO PASSO 3: DEVOLVER CRÉDITOS DO PACOTE
   async function excluirAula(aula: AulaComPagamento) {
     if (!window.confirm(`Excluir a aula de "${aula.nome_cliente}"?`)) return
     setExcluindo(aula.id)
 
-    // Se a aula foi debitada de um pacote, devolvemos a aula pra ele!
     if (aula.pacote_id) {
       const { data: pacoteAtual } = await supabase
         .from('pacotes')
@@ -141,7 +159,7 @@ export default function AulasTab() {
       if (pacoteAtual) {
         await supabase.from('pacotes').update({
           aulas_restantes: pacoteAtual.aulas_restantes + 1,
-          status: 'Ativo' // Ressuscita o pacote se ele estava finalizado
+          status: 'Ativo' 
         }).eq('id', aula.pacote_id)
       }
     }
@@ -152,7 +170,7 @@ export default function AulasTab() {
     if (!error) {
       setAulasHoje(prev => prev.filter(a => a.id !== aula.id))
       setAulasProgramadas(prev => prev.filter(a => a.id !== aula.id))
-      carregarPacotes() // Atualiza os pacotes na tela para refletir o estorno
+      carregarPacotes() 
     }
   }
 
@@ -173,9 +191,11 @@ export default function AulasTab() {
     setSalvando(true)
 
     const nomeDigitado = dados.nome_cliente.trim()
-    const alunoJaExiste = alunosCadastrados.some(a => a.nome.toLowerCase() === nomeDigitado.toLowerCase())
     
-    if (!alunoJaExiste && nomeDigitado.length > 0) {
+    // Verifica apenas no CRM oficial se o aluno precisa ser salvo silenciosamente
+    const { data: checkCRM } = await supabase.from('alunos').select('id').ilike('nome', nomeDigitado).limit(1)
+    
+    if (!checkCRM || checkCRM.length === 0) {
       await supabase.from('alunos').insert([{ nome: nomeDigitado }])
       carregarDadosBase() 
     }
@@ -403,7 +423,6 @@ export default function AulasTab() {
             </div>
 
             <div className="flex gap-2">
-              {/* O botão agora envia o objeto 'aula' inteiro para a função */}
               <button 
                 onClick={() => excluirAula(aula)}
                 disabled={excluindo === aula.id}
