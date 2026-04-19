@@ -51,7 +51,6 @@ function configUrgencia(dias: number) {
   }
 }
 
-// CORREÇÃO 2: Blinda a data
 function formatarDataCurta(dataStr: string) {
   if (!dataStr) return ''
   const apenasData = dataStr.split('T')[0]
@@ -83,7 +82,6 @@ export default function InadimplentesTab() {
     alunosData?.forEach((aluno: any) => {
       if (aluno.telefone) {
         const numLimpo = aluno.telefone.replace(/\D/g, '')
-        // CORREÇÃO 3: trim() ignora espaços invisíveis no nome
         telefonesMap[aluno.nome.trim()] = numLimpo.length <= 11 ? `55${numLimpo}` : numLimpo
       }
     })
@@ -303,7 +301,7 @@ export default function InadimplentesTab() {
                         className="w-full bg-[#25D366]/10 text-[#075E54] font-black text-[13px] py-3.5 rounded-xl border border-[#25D366]/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
                       >
                         <MessageCircle size={16} /> 
-                        Cobrar {dev.nome.split(' ')[0]} no Zap
+                        Notificar via WhatsApp
                       </button>
                       <button 
                         onClick={() => { setDevedorSelecionado(dev); setValorRecebido(restante.toString()); setFormaPagamento('Pix'); }} 
