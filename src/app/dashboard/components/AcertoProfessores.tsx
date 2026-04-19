@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Periodo, getRange, parseProfessores, formatarValor } from '@/lib/dateUtils'
-import { ChevronDown, ChevronRight, User, Calendar, Receipt } from 'lucide-react'
+import { ChevronDown, ChevronRight, User, Calendar, Receipt, Calculator } from 'lucide-react'
 
 interface AcertoProfessoresProps {
   periodo: Periodo
@@ -22,10 +22,12 @@ interface ResumoProfessor {
   aulas: AulaDetalhe[]
 }
 
+// CORREÇÃO 2: Blinda a data contra horários do banco de dados
 function formatarDataCurta(dataStr: string) {
   if (!dataStr) return ''
-  const partes = dataStr.split('-')
-  if (partes.length !== 3) return dataStr
+  const apenasData = dataStr.split('T')[0] // Tira a hora se tiver
+  const partes = apenasData.split('-')
+  if (partes.length !== 3) return apenasData
   return `${partes[2]}/${partes[1]}`
 }
 
@@ -107,6 +109,9 @@ export default function AcertoProfessores({ periodo }: AcertoProfessoresProps) {
     }
   }
 
+  // CORREÇÃO 1: Restaurar o cálculo do Total
+  const totalPeriodo = resumo.reduce((s, r) => s + r.total, 0)
+
   if (loading) {
     return (
       <div className="flex justify-center py-6">
@@ -124,68 +129,81 @@ export default function AcertoProfessores({ periodo }: AcertoProfessoresProps) {
   }
 
   return (
-    <div className="flex flex-col">
-      {resumo.map((prof, index) => {
-        const isExpanded = expandidoId === prof.nome
-        const isUltimo = index === resumo.length - 1
+    <div className="flex flex-col gap-2">
+      
+      {/* CORREÇÃO 1: Banner de Total Restaurado */}
+      {totalPeriodo > 0 && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mx-2 mt-2 flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <Calculator size={12} /> Total a Repassar
+            </span>
+          </div>
+          <span className="font-black text-slate-800 text-lg">{formatarValor(totalPeriodo)}</span>
+        </div>
+      )}
 
-        return (
-          <div key={prof.nome} className={`flex flex-col ${!isUltimo ? 'border-b border-slate-100' : ''}`}>
-            
-            <button 
-              onClick={() => toggleExpandir(prof.nome)}
-              className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 w-full text-left"
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors ${isExpanded ? 'bg-pink-100 text-pink-600' : 'bg-slate-100 text-slate-500'}`}>
-                   {prof.nome.substring(0,2).toUpperCase()}
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-800 leading-tight">{prof.nome}</h4>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 block">
-                    {prof.aulas.length} aula{prof.aulas.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <span className="text-base font-black text-slate-800 tracking-tight">
-                  {formatarValor(prof.total)}
-                </span>
-                <div className="text-slate-300">
-                  {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                </div>
-              </div>
-            </button>
+      <div className="flex flex-col mt-1">
+        {resumo.map((prof, index) => {
+          const isExpanded = expandidoId === prof.nome
+          const isUltimo = index === resumo.length - 1
 
-            {isExpanded && (
-              <div className="bg-slate-50 border-t border-slate-100 px-4 py-3 flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Receipt size={12} className="text-slate-400" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Extrato de Aulas</span>
-                </div>
-                
-                {prof.aulas.map((aula, i) => (
-                  <div key={aula.id + i} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-sm">
-                    <div className="flex items-center gap-2.5">
-                      <div className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-md flex items-center gap-1">
-                        <Calendar size={10} /> {formatarDataCurta(aula.data_aula)}
-                      </div>
-                      <span className="text-xs font-semibold text-slate-700 truncate max-w-[120px]">
-                        {aula.nome_cliente}
-                      </span>
-                    </div>
-                    <span className="text-xs font-black text-slate-600">
-                      {formatarValor(aula.valor_repasse)}
+          return (
+            <div key={prof.nome} className={`flex flex-col ${!isUltimo ? 'border-b border-slate-100' : ''}`}>
+              <button 
+                onClick={() => toggleExpandir(prof.nome)}
+                className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 w-full text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors ${isExpanded ? 'bg-pink-100 text-pink-600' : 'bg-slate-100 text-slate-500'}`}>
+                     {prof.nome.substring(0,2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-800 leading-tight">{prof.nome}</h4>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 block">
+                      {prof.aulas.length} aula{prof.aulas.length !== 1 ? 's' : ''}
                     </span>
                   </div>
-                ))}
-              </div>
-            )}
-            
-          </div>
-        )
-      })}
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <span className="text-base font-black text-slate-800 tracking-tight">
+                    {formatarValor(prof.total)}
+                  </span>
+                  <div className="text-slate-300">
+                    {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                  </div>
+                </div>
+              </button>
+
+              {isExpanded && (
+                <div className="bg-slate-50 border-t border-slate-100 px-4 py-3 flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Receipt size={12} className="text-slate-400" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Extrato de Aulas</span>
+                  </div>
+                  
+                  {prof.aulas.map((aula, i) => (
+                    <div key={aula.id + i} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-sm">
+                      <div className="flex items-center gap-2.5">
+                        <div className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-md flex items-center gap-1">
+                          <Calendar size={10} /> {formatarDataCurta(aula.data_aula)}
+                        </div>
+                        <span className="text-xs font-semibold text-slate-700 truncate max-w-[120px]">
+                          {aula.nome_cliente}
+                        </span>
+                      </div>
+                      <span className="text-xs font-black text-slate-600">
+                        {formatarValor(aula.valor_repasse)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

@@ -19,7 +19,7 @@ type Devedor = {
   tipo: 'aula' | 'pacote'
   nome: string
   descricao: string
-  telefone?: string // Agora usaremos este campo!
+  telefone?: string
   valor_total: number
   valor_pago: number
   dias_atraso: number
@@ -51,10 +51,12 @@ function configUrgencia(dias: number) {
   }
 }
 
+// CORREÇÃO 2: Blinda a data
 function formatarDataCurta(dataStr: string) {
   if (!dataStr) return ''
-  const partes = dataStr.split('-')
-  if (partes.length !== 3) return dataStr
+  const apenasData = dataStr.split('T')[0]
+  const partes = apenasData.split('-')
+  if (partes.length !== 3) return apenasData
   return `${partes[2]}/${partes[1]}`
 }
 
@@ -72,34 +74,30 @@ export default function InadimplentesTab() {
   const carregarInadimplentes = useCallback(async () => {
     setLoading(true)
     
-    // Busca Aulas, Pacotes e Histórico
     const { data: aulasData } = await supabase.from('registro_aulas').select('*').in('status_pagamento', ['Pendente', 'Parcial'])
     const { data: pacotesData } = await supabase.from('pacotes').select('*')
     const { data: todasAulas } = await supabase.from('registro_aulas').select('id, data_aula, modalidade, valor_aula, valor_pago, pacote_id, nome_cliente')
-    
-    // BUSCA OS TELEFONES DOS ALUNOS
     const { data: alunosData } = await supabase.from('alunos').select('nome, telefone')
     
-    // Cria um "dicionário" fácil: nome -> telefone limpo
     const telefonesMap: Record<string, string> = {}
     alunosData?.forEach((aluno: any) => {
       if (aluno.telefone) {
-        // Tira tudo que não é número
         const numLimpo = aluno.telefone.replace(/\D/g, '')
-        // Adiciona 55 (Brasil) se o número tiver 10 ou 11 dígitos (DDD + Número)
-        telefonesMap[aluno.nome] = numLimpo.length <= 11 ? `55${numLimpo}` : numLimpo
+        // CORREÇÃO 3: trim() ignora espaços invisíveis no nome
+        telefonesMap[aluno.nome.trim()] = numLimpo.length <= 11 ? `55${numLimpo}` : numLimpo
       }
     })
 
     const lista: Devedor[] = []
 
     aulasData?.forEach((a: RegistroAula & { valor_pago?: number }) => {
+      const nomeLimpo = (a.nome_cliente || '').trim()
       lista.push({
         id: `aula-${a.id}`,
         tipo: 'aula',
-        nome: a.nome_cliente,
+        nome: nomeLimpo,
         descricao: `${a.modalidade}`,
-        telefone: telefonesMap[a.nome_cliente], // Injeta o telefone aqui
+        telefone: telefonesMap[nomeLimpo],
         valor_total: Number(a.valor_aula),
         valor_pago: Number(a.valor_pago || 0),
         dias_atraso: calcularDiasAtraso(a.data_aula),
@@ -117,6 +115,7 @@ export default function InadimplentesTab() {
     pacotesData?.forEach((p: Pacote) => {
       if (Number(p.valor_pago) < Number(p.valor_total)) {
         const dataCriacao = p.created_at ? p.created_at.split('T')[0] : hojeEmBrasilia()
+        const nomeLimpo = (p.nome_cliente || '').trim()
         
         const aulasDoPacote = (todasAulas || []).filter((aula: any) => aula.pacote_id === p.id)
           .map((aula: any) => ({
@@ -131,9 +130,9 @@ export default function InadimplentesTab() {
         lista.push({
           id: `pacote-${p.id}`,
           tipo: 'pacote',
-          nome: p.nome_cliente,
+          nome: nomeLimpo,
           descricao: `Pacote (${p.aulas_restantes} restantes)`,
-          telefone: telefonesMap[p.nome_cliente], // Injeta o telefone aqui
+          telefone: telefonesMap[nomeLimpo],
           valor_total: Number(p.valor_total),
           valor_pago: Number(p.valor_pago || 0),
           dias_atraso: calcularDiasAtraso(dataCriacao),
@@ -186,7 +185,6 @@ export default function InadimplentesTab() {
     }
     const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}).${msgAulas}\nPodemos acertar? 🏄‍♂️`)
     
-    // Redirecionamento Dinâmico
     if (d.telefone) {
       window.open(`https://wa.me/${d.telefone}?text=${texto}`, '_blank')
     } else {
