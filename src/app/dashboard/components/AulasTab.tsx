@@ -77,7 +77,6 @@ export default function AulasTab() {
   )
 
   const carregarDadosBase = useCallback(async () => {
-    // 1. Professores
     const { data: profs } = await supabase
       .from('professores')
       .select('nome')
@@ -85,28 +84,9 @@ export default function AulasTab() {
       .order('nome', { ascending: true })
     if (profs) setListaProfessores(profs.map(p => p.nome))
 
-    // 2. MOTOR HÍBRIDO: Puxa do CRM e do Histórico do Passado
-    const { data: alunosCRM } = await supabase.from('alunos').select('nome')
-    const { data: historicoAulas } = await supabase.from('registro_aulas').select('nome_cliente')
-    const { data: historicoPacotes } = await supabase.from('pacotes').select('nome_cliente')
-
-    // Junta tudo num Set (que já remove os nomes duplicados automaticamente)
-    const nomesSet = new Set<string>()
-    
-    alunosCRM?.forEach(a => { if (a.nome) nomesSet.add(a.nome.trim()) })
-    historicoAulas?.forEach(a => { if (a.nome_cliente) nomesSet.add(a.nome_cliente.trim()) })
-    historicoPacotes?.forEach(p => { if (p.nome_cliente) nomesSet.add(p.nome_cliente.trim()) })
-
-    // Transforma de volta em lista para o Autocompletar ler
-    const listaUnica = Array.from(nomesSet).map((nome, index) => ({
-      id: `auto-${index}`,
-      nome: nome
-    }))
-    
-    // Organiza em ordem alfabética
-    listaUnica.sort((a, b) => a.nome.localeCompare(b.nome))
-
-    setAlunosCadastrados(listaUnica)
+    // VOLTOU PARA A VERSÃO LIMPA: Puxa apenas da tabela oficial de Alunos
+    const { data: alunos } = await supabase.from('alunos').select('id, nome').order('nome', { ascending: true })
+    if (alunos) setAlunosCadastrados(alunos)
   }, [])
 
   const carregarAulas = useCallback(async () => {
@@ -192,7 +172,6 @@ export default function AulasTab() {
 
     const nomeDigitado = dados.nome_cliente.trim()
     
-    // Verifica apenas no CRM oficial se o aluno precisa ser salvo silenciosamente
     const { data: checkCRM } = await supabase.from('alunos').select('id').ilike('nome', nomeDigitado).limit(1)
     
     if (!checkCRM || checkCRM.length === 0) {
