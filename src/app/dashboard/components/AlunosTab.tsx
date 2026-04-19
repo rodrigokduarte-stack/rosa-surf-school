@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Users, Plus, Trash2, Search, Phone, Calendar, FileText, CheckCircle, X, Share2 } from 'lucide-react'
+import { Users, Plus, Trash2, Search, Phone, Calendar, FileText, CheckCircle, X, MessageCircle, AtSign } from 'lucide-react'
 
 interface Aluno {
   id: string
@@ -10,9 +10,9 @@ interface Aluno {
   telefone?: string
   data_nascimento?: string
   observacoes?: string
+  instagram?: string
 }
 
-// Função local para formatar a data (Blindada)
 function formatarDataNascimento(dataStr?: string) {
   if (!dataStr) return ''
   const partes = dataStr.split('-')
@@ -28,9 +28,9 @@ export default function AlunosTab() {
   const [modalAberto, setModalAberto] = useState(false)
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
-  // Estados do formulário
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
+  const [instagram, setInstagram] = useState('')
   const [dataNascimento, setDataNascimento] = useState('')
   const [observacoes, setObservacoes] = useState('')
 
@@ -54,13 +54,14 @@ export default function AlunosTab() {
     const { error } = await supabase.from('alunos').insert([{ 
       nome: nome.trim(), 
       telefone: telefone.trim() || null, 
+      instagram: instagram.trim() || null,
       data_nascimento: dataNascimento || null, 
       observacoes: observacoes.trim() || null 
     }])
 
     setSalvando(false)
     if (!error) {
-      setNome(''); setTelefone(''); setDataNascimento(''); setObservacoes('')
+      setNome(''); setTelefone(''); setInstagram(''); setDataNascimento(''); setObservacoes('')
       setModalAberto(false)
       carregarAlunos()
     } else {
@@ -81,7 +82,6 @@ export default function AlunosTab() {
   return (
     <div className="px-4 py-2 flex flex-col gap-6 w-full overflow-x-hidden">
       
-      {/* HEADER KPI PREMIUM COM BOTÃO DE COMPARTILHAR */}
       <div className="flex gap-3 -mt-2">
         <div className="flex-1 bg-gradient-to-br from-pink-500 to-rose-600 rounded-[20px] p-5 flex flex-col shadow-[0_4px_20px_rgba(232,67,106,0.3)] relative overflow-hidden">
           
@@ -94,12 +94,11 @@ export default function AlunosTab() {
             <button
               onClick={() => {
                 const url = `${window.location.origin}/cadastro`
-                navigator.clipboard.writeText(url)
-                alert("Link copiado! Agora é só colar no WhatsApp do cliente. 🏄‍♂️")
+                window.open(`https://wa.me/?text=${encodeURIComponent(url)}`, '_blank')
               }}
-              className="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-3 py-1.5 rounded-full border border-white/20 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+              className="bg-[#25D366] hover:bg-[#1EBE5D] text-white text-[10px] font-bold px-3 py-1.5 rounded-full border border-[#1EBE5D] transition-all flex items-center gap-1.5 shadow-md active:scale-95"
             >
-              <Share2 size={12} /> Copiar Link
+              <MessageCircle size={14} /> Enviar no Zap
             </button>
           </div>
 
@@ -112,7 +111,6 @@ export default function AlunosTab() {
         </div>
       </div>
 
-      {/* BARRA DE BUSCA */}
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
           <Search size={18} className="text-slate-400" />
@@ -126,7 +124,6 @@ export default function AlunosTab() {
         />
       </div>
 
-      {/* LISTA DE ALUNOS */}
       <div>
         <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
           <span className="w-2 h-2 rounded-full bg-pink-500" /> Cadastros ({alunosFiltrados.length})
@@ -152,11 +149,18 @@ export default function AlunosTab() {
                     </div>
                     <div>
                       <h4 className="font-black text-slate-800 leading-tight">{aluno.nome}</h4>
-                      {aluno.telefone && (
-                        <span className="text-[11px] font-bold text-slate-400 mt-0.5 flex items-center gap-1">
-                          <Phone size={10} /> {aluno.telefone}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                        {aluno.telefone && (
+                          <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                            <Phone size={10} /> {aluno.telefone}
+                          </span>
+                        )}
+                        {aluno.instagram && (
+                          <span className="text-[11px] font-bold text-pink-500 flex items-center gap-1">
+                            <AtSign size={10} /> {aluno.instagram}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <button
@@ -190,7 +194,6 @@ export default function AlunosTab() {
         )}
       </div>
 
-      {/* FAB - Botão Flutuante */}
       <button
         onClick={() => setModalAberto(true)}
         className="fixed bottom-[88px] right-5 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-[0_4px_20px_rgba(232,67,106,0.45)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40"
@@ -198,7 +201,6 @@ export default function AlunosTab() {
         <Plus size={28} strokeWidth={2.5} />
       </button>
 
-      {/* MODAL BOTTOM SHEET */}
       {modalAberto && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div 
@@ -226,51 +228,50 @@ export default function AlunosTab() {
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Nome Completo *</label>
                 <input
-                  type="text"
-                  required
-                  placeholder="Ex: João da Silva"
-                  value={nome}
-                  onChange={e => setNome(e.target.value)}
+                  type="text" required placeholder="Ex: João da Silva"
+                  value={nome} onChange={e => setNome(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Telefone / WhatsApp</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Telefone</label>
                   <input
-                    type="tel"
-                    placeholder="(00) 00000-0000"
-                    value={telefone}
-                    onChange={e => setTelefone(e.target.value)}
+                    type="tel" placeholder="(00) 00000-0000"
+                    value={telefone} onChange={e => setTelefone(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Nascimento</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Instagram</label>
                   <input
-                    type="date"
-                    value={dataNascimento}
-                    onChange={e => setDataNascimento(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
+                    type="text" placeholder="@usuario"
+                    value={instagram} onChange={e => setInstagram(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
                   />
                 </div>
               </div>
 
               <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Nascimento</label>
+                <input
+                  type="date" value={dataNascimento} onChange={e => setDataNascimento(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
+                />
+              </div>
+
+              <div>
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Observações Médicas / Nível</label>
                 <textarea
-                  rows={3}
-                  placeholder="Ex: Alérgico a abelha. Nível iniciante, dificuldade em dropar."
-                  value={observacoes}
-                  onChange={e => setObservacoes(e.target.value)}
+                  rows={3} placeholder="Ex: Alérgico a abelha. Iniciante."
+                  value={observacoes} onChange={e => setObservacoes(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 resize-none transition-all"
                 />
               </div>
 
               <button
-                type="submit"
-                disabled={salvando || !nome.trim()}
+                type="submit" disabled={salvando || !nome.trim()}
                 className="w-full bg-slate-800 text-white font-bold py-4 rounded-xl text-lg mt-2 shadow-[0_4px_14px_rgba(0,0,0,0.2)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {salvando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle size={20} />}

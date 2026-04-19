@@ -2,13 +2,14 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Waves, CheckCircle, User, Phone, Calendar, ShieldCheck } from 'lucide-react'
+import { Waves, CheckCircle, User, Phone, Calendar, ShieldCheck, AtSign } from 'lucide-react'
 
 export default function CadastroPublico() {
   const [enviado, setEnviado] = useState(false)
   const [loading, setLoading] = useState(false)
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
+  const [instagram, setInstagram] = useState('')
   const [nascimento, setNascimento] = useState('')
   const [aceitou, setAceitou] = useState(false)
 
@@ -18,18 +19,17 @@ export default function CadastroPublico() {
     
     setLoading(true)
 
-    // 1. Cadastra o Aluno no CRM (ou atualiza se já existir)
     const { data: aluno, error: errorAluno } = await supabase
       .from('alunos')
       .upsert({ 
         nome: nome.trim(), 
         telefone: telefone.trim(), 
+        instagram: instagram.trim(),
         data_nascimento: nascimento 
-      }, { onConflict: 'nome' }) // Evita duplicar se o nome for igual
+      }, { onConflict: 'nome' }) 
       .select()
       .single()
 
-    // 2. Registra a assinatura do termo
     if (!errorAluno) {
       await supabase.from('termos_assinados').insert([{
         nome_cliente: nome.trim(),
@@ -93,6 +93,18 @@ export default function CadastroPublico() {
                 <input 
                   type="tel" required placeholder="(00) 00000-0000"
                   value={telefone} onChange={e => setTelefone(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-pink-500 transition-all font-semibold"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 block ml-1">Instagram (opcional)</label>
+              <div className="relative">
+                <AtSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                <input 
+                  type="text" placeholder="@seu.perfil"
+                  value={instagram} onChange={e => setInstagram(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-pink-500 transition-all font-semibold"
                 />
               </div>
