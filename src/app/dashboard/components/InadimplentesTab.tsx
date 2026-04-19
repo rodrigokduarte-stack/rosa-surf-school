@@ -19,12 +19,12 @@ type Devedor = {
   tipo: 'aula' | 'pacote'
   nome: string
   descricao: string
-  telefone?: string
+  telefone?: string // Agora usaremos este campo!
   valor_total: number
   valor_pago: number
   dias_atraso: number
   original_id: string
-  aulas_historico: AulaDetalhe[] // Novo campo para guardar o histórico
+  aulas_historico: AulaDetalhe[]
 }
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
@@ -51,7 +51,6 @@ function configUrgencia(dias: number) {
   }
 }
 
-// Formata a data para dd/mm
 function formatarDataCurta(dataStr: string) {
   if (!dataStr) return ''
   const partes = dataStr.split('-')
@@ -73,36 +72,39 @@ export default function InadimplentesTab() {
   const carregarInadimplentes = useCallback(async () => {
     setLoading(true)
     
-    // Busca Aulas Pendentes
-    const { data: aulasData } = await supabase
-      .from('registro_aulas')
-      .select('*')
-      .in('status_pagamento', ['Pendente', 'Parcial'])
-      
-    // Busca Pacotes Pendentes
-    const { data: pacotesData } = await supabase
-      .from('pacotes')
-      .select('*')
-
-    // Busca TODO o histórico de aulas para vincular aos pacotes se necessário
-    const { data: todasAulas } = await supabase
-      .from('registro_aulas')
-      .select('id, data_aula, modalidade, valor_aula, valor_pago, pacote_id, nome_cliente')
+    // Busca Aulas, Pacotes e Histórico
+    const { data: aulasData } = await supabase.from('registro_aulas').select('*').in('status_pagamento', ['Pendente', 'Parcial'])
+    const { data: pacotesData } = await supabase.from('pacotes').select('*')
+    const { data: todasAulas } = await supabase.from('registro_aulas').select('id, data_aula, modalidade, valor_aula, valor_pago, pacote_id, nome_cliente')
+    
+    // BUSCA OS TELEFONES DOS ALUNOS
+    const { data: alunosData } = await supabase.from('alunos').select('nome, telefone')
+    
+    // Cria um "dicionário" fácil: nome -> telefone limpo
+    const telefonesMap: Record<string, string> = {}
+    alunosData?.forEach((aluno: any) => {
+      if (aluno.telefone) {
+        // Tira tudo que não é número
+        const numLimpo = aluno.telefone.replace(/\D/g, '')
+        // Adiciona 55 (Brasil) se o número tiver 10 ou 11 dígitos (DDD + Número)
+        telefonesMap[aluno.nome] = numLimpo.length <= 11 ? `55${numLimpo}` : numLimpo
+      }
+    })
 
     const lista: Devedor[] = []
 
-    // Processa Aulas Avulsas
     aulasData?.forEach((a: RegistroAula & { valor_pago?: number }) => {
       lista.push({
         id: `aula-${a.id}`,
         tipo: 'aula',
         nome: a.nome_cliente,
         descricao: `${a.modalidade}`,
+        telefone: telefonesMap[a.nome_cliente], // Injeta o telefone aqui
         valor_total: Number(a.valor_aula),
         valor_pago: Number(a.valor_pago || 0),
         dias_atraso: calcularDiasAtraso(a.data_aula),
         original_id: a.id,
-        aulas_historico: [{ // Para aula avulsa, o histórico é a própria aula
+        aulas_historico: [{
           id: a.id,
           data_aula: a.data_aula,
           modalidade: a.modalidade,
@@ -112,12 +114,10 @@ export default function InadimplentesTab() {
       })
     })
 
-    // Processa Pacotes
     pacotesData?.forEach((p: Pacote) => {
       if (Number(p.valor_pago) < Number(p.valor_total)) {
         const dataCriacao = p.created_at ? p.created_at.split('T')[0] : hojeEmBrasilia()
         
-        // Acha as aulas que esse aluno fez usando esse pacote
         const aulasDoPacote = (todasAulas || []).filter((aula: any) => aula.pacote_id === p.id)
           .map((aula: any) => ({
             id: aula.id,
@@ -133,6 +133,7 @@ export default function InadimplentesTab() {
           tipo: 'pacote',
           nome: p.nome_cliente,
           descricao: `Pacote (${p.aulas_restantes} restantes)`,
+          telefone: telefonesMap[p.nome_cliente], // Injeta o telefone aqui
           valor_total: Number(p.valor_total),
           valor_pago: Number(p.valor_pago || 0),
           dias_atraso: calcularDiasAtraso(dataCriacao),
@@ -184,7 +185,13 @@ export default function InadimplentesTab() {
       msgAulas = `\nRef: ` + d.aulas_historico.map(a => `${formatarDataCurta(a.data_aula)}`).join(', ')
     }
     const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente do seu plano (${formatarValor(d.valor_total - d.valor_pago)}).${msgAulas}\nPodemos acertar? 🏄‍♂️`)
-    window.open(`https://wa.me/?text=${texto}`, '_blank')
+    
+    // Redirecionamento Dinâmico
+    if (d.telefone) {
+      window.open(`https://wa.me/${d.telefone}?text=${texto}`, '_blank')
+    } else {
+      window.open(`https://wa.me/?text=${texto}`, '_blank')
+    }
   }
 
   const totalEmAberto = devedores.reduce((s, d) => s + (d.valor_total - d.valor_pago), 0)
@@ -272,7 +279,6 @@ export default function InadimplentesTab() {
                   {isOp && (
                     <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
                       
-                      {/* EXTRATO DA DÍVIDA (SANFONA) */}
                       {dev.aulas_historico.length > 0 && (
                         <div className="bg-slate-50 rounded-xl p-3 mb-2 border border-slate-100">
                           <div className="flex items-center gap-1.5 mb-2">
@@ -299,7 +305,7 @@ export default function InadimplentesTab() {
                         className="w-full bg-[#25D366]/10 text-[#075E54] font-black text-[13px] py-3.5 rounded-xl border border-[#25D366]/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
                       >
                         <MessageCircle size={16} /> 
-                        Enviar Cobrança no WhatsApp
+                        Cobrar {dev.nome.split(' ')[0]} no Zap
                       </button>
                       <button 
                         onClick={() => { setDevedorSelecionado(dev); setValorRecebido(restante.toString()); setFormaPagamento('Pix'); }} 
