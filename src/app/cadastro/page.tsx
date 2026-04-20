@@ -19,7 +19,6 @@ export default function CadastroPublico() {
     
     setLoading(true)
 
-    // AQUI ESTÁ A CORREÇÃO: Removemos o .select().single()
     const { error: errorAluno } = await supabase
       .from('alunos')
       .upsert({ 
@@ -39,10 +38,10 @@ export default function CadastroPublico() {
       if (!errorTermo) {
         setEnviado(true)
       } else {
-        alert("Erro ao registrar o termo. Tente novamente.")
+        alert(`ERRO NO TERMO: ${errorTermo.message}`)
       }
     } else {
-      alert("Erro ao processar cadastro. Tente novamente.")
+      alert(`ERRO NO ALUNO: ${errorAluno.message}`)
     }
     
     setLoading(false)
