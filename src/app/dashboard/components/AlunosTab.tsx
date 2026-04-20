@@ -48,12 +48,13 @@ export default function AlunosTab() {
     e.preventDefault()
     setSalvando(true)
 
+    // Apenas o nome é obrigatório agora
     const { error } = await supabase
       .from('alunos')
       .insert([{ 
         nome: novoNome.trim(), 
-        telefone: novoTelefone.trim(), 
-        instagram: novoInstagram.trim() 
+        telefone: novoTelefone.trim() || null, // Se estiver vazio, envia nulo
+        instagram: novoInstagram.trim() || null 
       }])
 
     if (error) {
@@ -63,13 +64,13 @@ export default function AlunosTab() {
       setNovoTelefone('')
       setNovoInstagram('')
       setIsModalOpen(false)
-      carregarAlunos() // Atualiza a lista na hora
+      carregarAlunos() 
     }
     setSalvando(false)
   }
 
   function compartilharLink() {
-    const link = "https://rosasurf.vercel.app/cadastro" // Ajuste para o seu link real
+    const link = "https://rosasurf.vercel.app/cadastro" 
     const mensagem = encodeURIComponent(`Olá! Para agilizar sua aula na Rosa Surf School, preencha sua ficha e assine o termo de responsabilidade por este link: ${link}`)
     window.open(`https://wa.me/?text=${mensagem}`, '_blank')
   }
@@ -82,7 +83,6 @@ export default function AlunosTab() {
   return (
     <div className="px-4 py-2 flex flex-col gap-6 animate-in fade-in duration-500 relative min-h-[80vh]">
       
-      {/* Header com Botão de Compartilhar Link */}
       <div className="flex justify-between items-center">
         <div className="flex flex-col">
           <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2 drop-shadow-md">
@@ -131,7 +131,7 @@ export default function AlunosTab() {
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-slate-50 rounded-xl p-3 flex flex-col gap-1">
                 <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1"><Phone size={10} /> WhatsApp</span>
-                <span className="text-xs font-bold text-slate-700">{aluno.telefone}</span>
+                <span className="text-xs font-bold text-slate-700">{aluno.telefone || '---'}</span>
               </div>
               <div className="bg-slate-50 rounded-xl p-3 flex flex-col gap-1">
                 <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1"><AtSign size={10} /> Instagram</span>
@@ -146,7 +146,6 @@ export default function AlunosTab() {
         ))}
       </div>
 
-      {/* BOTÃO FLUTUANTE (FAB) */}
       <button 
         onClick={() => setIsModalOpen(true)}
         className="fixed bottom-24 right-6 w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-600 text-white rounded-full shadow-[0_8px_20px_rgba(232,67,106,0.4)] flex items-center justify-center transition-all active:scale-90 z-40 hover:rotate-90 duration-300"
@@ -154,7 +153,6 @@ export default function AlunosTab() {
         <Plus size={32} strokeWidth={3} />
       </button>
 
-      {/* MODAL DE CADASTRO MANUAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
@@ -170,11 +168,11 @@ export default function AlunosTab() {
                 <input required type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-4 py-4 focus:ring-2 focus:ring-pink-500 outline-none font-bold text-slate-700" />
               </div>
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">WhatsApp</label>
-                <input required type="tel" value={novoTelefone} onChange={e => setNovoTelefone(e.target.value)} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-4 py-4 focus:ring-2 focus:ring-pink-500 outline-none font-bold text-slate-700" />
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">WhatsApp (Opcional)</label>
+                <input type="tel" value={novoTelefone} onChange={e => setNovoTelefone(e.target.value)} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-4 py-4 focus:ring-2 focus:ring-pink-500 outline-none font-bold text-slate-700" />
               </div>
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Instagram</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Instagram (Opcional)</label>
                 <input type="text" value={novoInstagram} onChange={e => setNovoInstagram(e.target.value)} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-4 py-4 focus:ring-2 focus:ring-pink-500 outline-none font-bold text-slate-700" />
               </div>
             </div>
