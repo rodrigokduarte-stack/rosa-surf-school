@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { 
   Users, Search, UserPlus, Phone, AtSign, 
-  Fingerprint, Plus, Share2, X, CheckCircle 
+  Fingerprint, Plus, Share2, X, CheckCircle, Edit2 
 } from 'lucide-react'
 
 export default function AlunosTab() {
@@ -12,9 +12,12 @@ export default function AlunosTab() {
   const [busca, setBusca] = useState('')
   const [loading, setLoading] = useState(true)
   
-  // Estados para o Modal de Cadastro Manual
+  // Estados para o Modal de Cadastro/Edição
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [salvando, setSalvando] = useState(false)
+  const [alunoEditando, setAlunoEditando] = useState<string | null>(null)
+  
+  // Campos do formulário
   const [novoNome, setNovoNome] = useState('')
   const [novoTelefone, setNovoTelefone] = useState('')
   const [novoInstagram, setNovoInstagram] = useState('')
@@ -44,33 +47,59 @@ export default function AlunosTab() {
     carregarAlunos()
   }, [])
 
-  async function handleAddManual(e: React.FormEvent) {
+  function abrirModalNovo() {
+    setAlunoEditando(null)
+    setNovoNome('')
+    setNovoTelefone('')
+    setNovoInstagram('')
+    setIsModalOpen(true)
+  }
+
+  function abrirModalEditar(aluno: any) {
+    setAlunoEditando(aluno.id)
+    setNovoNome(aluno.nome)
+    setNovoTelefone(aluno.telefone || '')
+    setNovoInstagram(aluno.instagram || '')
+    setIsModalOpen(true)
+  }
+
+  async function handleSalvarAluno(e: React.FormEvent) {
     e.preventDefault()
     setSalvando(true)
 
-    // Apenas o nome é obrigatório agora
-    const { error } = await supabase
-      .from('alunos')
-      .insert([{ 
-        nome: novoNome.trim(), 
-        telefone: novoTelefone.trim() || null, 
-        instagram: novoInstagram.trim() || null 
-      }])
+    const payload = { 
+      nome: novoNome.trim(), 
+      telefone: novoTelefone.trim() || null, 
+      instagram: novoInstagram.trim() || null 
+    }
+
+    let error;
+
+    if (alunoEditando) {
+      // MODO EDIÇÃO
+      const response = await supabase
+        .from('alunos')
+        .update(payload)
+        .eq('id', alunoEditando)
+      error = response.error
+    } else {
+      // MODO NOVO ALUNO
+      const response = await supabase
+        .from('alunos')
+        .insert([payload])
+      error = response.error
+    }
 
     if (error) {
-      alert("Erro ao cadastrar: " + error.message)
+      alert("Erro ao salvar: " + error.message)
     } else {
-      setNovoNome('')
-      setNovoTelefone('')
-      setNovoInstagram('')
       setIsModalOpen(false)
-      carregarAlunos() 
+      carregarAlunos() // Atualiza a lista na hora
     }
     setSalvando(false)
   }
 
   function compartilharLink() {
-    // Detecta automaticamente se estás em localhost ou no domínio da Vercel
     const dominio = window.location.origin
     const link = `${dominio}/cadastro` 
     
@@ -86,7 +115,7 @@ export default function AlunosTab() {
   return (
     <div className="px-4 py-2 flex flex-col gap-6 animate-in fade-in duration-500 relative min-h-[80vh]">
       
-      {/* Header com botão de link dinâmico */}
+      {/* Header */}
       <div className="flex justify-between items-center">
         <div className="flex flex-col">
           <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2 drop-shadow-md">
@@ -104,7 +133,7 @@ export default function AlunosTab() {
         </button>
       </div>
 
-      {/* Campo de Busca */}
+      {/* Busca */}
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
         <input
@@ -116,7 +145,7 @@ export default function AlunosTab() {
         />
       </div>
 
-      {/* Lista de Cards */}
+      {/* Lista de Alunos */}
       <div className="flex flex-col gap-3 pb-24">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-4">
@@ -124,17 +153,29 @@ export default function AlunosTab() {
           </div>
         ) : alunosFiltrados.map((aluno) => (
           <div key={aluno.id} className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 flex flex-col gap-4 animate-in slide-in-from-bottom-2">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
-                <UserPlus size={24} />
+            
+            {/* Header do Card */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
+                  <UserPlus size={24} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 leading-tight">{aluno.nome}</h3>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Desde {new Date(aluno.created_at).toLocaleDateString('pt-BR')}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-slate-800 leading-tight">{aluno.nome}</h3>
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Desde {new Date(aluno.created_at).toLocaleDateString('pt-BR')}</p>
-              </div>
+              
+              {/* BOTÃO DE EDITAR */}
+              <button 
+                onClick={() => abrirModalEditar(aluno)}
+                className="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:text-pink-600 hover:bg-pink-50 transition-colors"
+              >
+                <Edit2 size={14} />
+              </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 mt-1">
               <div className="bg-slate-50 rounded-xl p-3 flex flex-col gap-1">
                 <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1"><Phone size={10} /> WhatsApp</span>
                 <span className="text-xs font-bold text-slate-700">{aluno.telefone || '---'}</span>
@@ -152,21 +193,23 @@ export default function AlunosTab() {
         ))}
       </div>
 
-      {/* Botão FAB Rosa */}
+      {/* BOTÃO FLUTUANTE (FAB) */}
       <button 
-        onClick={() => setIsModalOpen(true)}
+        onClick={abrirModalNovo}
         className="fixed bottom-24 right-6 w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-600 text-white rounded-full shadow-[0_8px_20px_rgba(232,67,106,0.4)] flex items-center justify-center transition-all active:scale-90 z-40 hover:rotate-90 duration-300"
       >
         <Plus size={32} strokeWidth={3} />
       </button>
 
-      {/* Modal de Cadastro Manual Corrigido */}
+      {/* MODAL DE CADASTRO / EDIÇÃO */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
-          <form onSubmit={handleAddManual} className="relative w-full max-w-md bg-white rounded-[32px] p-6 shadow-2xl flex flex-col gap-5">
+          <form onSubmit={handleSalvarAluno} className="relative w-full max-w-md bg-white rounded-[32px] p-6 shadow-2xl flex flex-col gap-5">
             <div className="flex justify-between items-center border-b border-slate-50 pb-4">
-              <h3 className="text-lg font-black text-slate-800 tracking-tight">Novo Aluno Manual</h3>
+              <h3 className="text-lg font-black text-slate-800 tracking-tight">
+                {alunoEditando ? 'Editar Aluno' : 'Novo Aluno Manual'}
+              </h3>
               <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-300 hover:text-slate-500"><X size={24} /></button>
             </div>
 
@@ -190,7 +233,7 @@ export default function AlunosTab() {
               type="submit" 
               className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all"
             >
-              {salvando ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><CheckCircle size={20} /> Finalizar Cadastro</>}
+              {salvando ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><CheckCircle size={20} /> Salvar Dados</>}
             </button>
           </form>
         </div>
