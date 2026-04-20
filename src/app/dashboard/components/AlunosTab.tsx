@@ -17,6 +17,9 @@ export default function AlunosTab() {
   const [salvando, setSalvando] = useState(false)
   const [alunoEditando, setAlunoEditando] = useState<string | null>(null)
   
+  // Guardamos o nome original para fazer a "Atualização em Cascata" no histórico
+  const [nomeOriginal, setNomeOriginal] = useState('')
+  
   // Campos do formulário
   const [novoNome, setNovoNome] = useState('')
   const [novoTelefone, setNovoTelefone] = useState('')
@@ -50,6 +53,7 @@ export default function AlunosTab() {
   function abrirModalNovo() {
     setAlunoEditando(null)
     setNovoNome('')
+    setNomeOriginal('')
     setNovoTelefone('')
     setNovoInstagram('')
     setIsModalOpen(true)
@@ -58,6 +62,7 @@ export default function AlunosTab() {
   function abrirModalEditar(aluno: any) {
     setAlunoEditando(aluno.id)
     setNovoNome(aluno.nome)
+    setNomeOriginal(aluno.nome) // Grava quem ele era antes da edição
     setNovoTelefone(aluno.telefone || '')
     setNovoInstagram(aluno.instagram || '')
     setIsModalOpen(true)
@@ -67,8 +72,9 @@ export default function AlunosTab() {
     e.preventDefault()
     setSalvando(true)
 
+    const nomeFormatado = novoNome.trim()
     const payload = { 
-      nome: novoNome.trim(), 
+      nome: nomeFormatado, 
       telefone: novoTelefone.trim() || null, 
       instagram: novoInstagram.trim() || null 
     }
@@ -76,12 +82,23 @@ export default function AlunosTab() {
     let error;
 
     if (alunoEditando) {
-      // MODO EDIÇÃO
+      // 1. Atualiza o cadastro do aluno na tabela principal
       const response = await supabase
         .from('alunos')
         .update(payload)
         .eq('id', alunoEditando)
       error = response.error
+
+      // 2. A MÁGICA DA CASCATA: Se o nome mudou, atualiza o histórico todo!
+      if (!error && nomeFormatado !== nomeOriginal) {
+        // Troca nas Aulas
+        await supabase.from('registro_aulas').update({ nome_cliente: nomeFormatado }).eq('nome_cliente', nomeOriginal)
+        // Troca nos Pacotes
+        await supabase.from('pacotes').update({ nome_cliente: nomeFormatado }).eq('nome_cliente', nomeOriginal)
+        // Troca nos Termos
+        await supabase.from('termos_assinados').update({ nome_aluno: nomeFormatado }).eq('nome_aluno', nomeOriginal)
+      }
+
     } else {
       // MODO NOVO ALUNO
       const response = await supabase
@@ -94,7 +111,7 @@ export default function AlunosTab() {
       alert("Erro ao salvar: " + error.message)
     } else {
       setIsModalOpen(false)
-      carregarAlunos() // Atualiza a lista na hora
+      carregarAlunos() 
     }
     setSalvando(false)
   }
@@ -154,7 +171,6 @@ export default function AlunosTab() {
         ) : alunosFiltrados.map((aluno) => (
           <div key={aluno.id} className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 flex flex-col gap-4 animate-in slide-in-from-bottom-2">
             
-            {/* Header do Card */}
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
@@ -166,7 +182,6 @@ export default function AlunosTab() {
                 </div>
               </div>
               
-              {/* BOTÃO DE EDITAR */}
               <button 
                 onClick={() => abrirModalEditar(aluno)}
                 className="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:text-pink-600 hover:bg-pink-50 transition-colors"
@@ -193,7 +208,6 @@ export default function AlunosTab() {
         ))}
       </div>
 
-      {/* BOTÃO FLUTUANTE (FAB) */}
       <button 
         onClick={abrirModalNovo}
         className="fixed bottom-24 right-6 w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-600 text-white rounded-full shadow-[0_8px_20px_rgba(232,67,106,0.4)] flex items-center justify-center transition-all active:scale-90 z-40 hover:rotate-90 duration-300"
@@ -201,7 +215,6 @@ export default function AlunosTab() {
         <Plus size={32} strokeWidth={3} />
       </button>
 
-      {/* MODAL DE CADASTRO / EDIÇÃO */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
