@@ -19,7 +19,7 @@ export default function CadastroPublico() {
     
     setLoading(true)
 
-    // 1. TENTA SALVAR O ALUNO (Removido data_nascimento daqui)
+    // 1. TENTA SALVAR O ALUNO PRIMEIRO (Sem data de nascimento)
     const { error: errorAluno } = await supabase
       .from('alunos')
       .insert([{ 
@@ -28,14 +28,15 @@ export default function CadastroPublico() {
         instagram: instagram.trim()
       }]) 
 
+    // LÓGICA ANTI-FALHA: Se o aluno falhar, o código PARA aqui.
     if (errorAluno) {
       console.error("Erro Aluno:", errorAluno)
-      alert(`ERRO CRÍTICO (ALUNO): ${errorAluno.message}`)
+      alert(`ERRO AO SALVAR ALUNO: ${errorAluno.message}`)
       setLoading(false)
       return 
     }
 
-    // 2. SALVA O TERMO
+    // 2. SÓ SE O ALUNO SALVOU COM SUCESSO, TENTA SALVAR O TERMO
     const { error: errorTermo } = await supabase.from('termos_assinados').insert([{
       nome_aluno: nome.trim(),
       cpf: cpf.trim(),
@@ -59,7 +60,7 @@ export default function CadastroPublico() {
           <CheckCircle size={40} />
         </div>
         <h1 className="text-2xl font-black text-slate-800 mb-2">Cadastro Concluído!</h1>
-        <p className="text-slate-600 mb-8 font-medium">Tudo pronto, {nome.split(' ')[0]}! Seus dados e o termo de responsabilidade foram registrados. Nos vemos na água! 🏄‍♂️</p>
+        <p className="text-slate-600 mb-8 font-medium">Tudo pronto, {nome.split(' ')[0]}! Seus dados e o termo foram registrados. Nos vemos na água! 🏄‍♂️</p>
         <div className="flex items-center gap-2 text-pink-500 font-bold">
           <Waves size={20} />
           <span>Rosa Surf School</span>
