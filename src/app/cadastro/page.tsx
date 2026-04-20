@@ -2,12 +2,13 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Waves, CheckCircle, User, Phone, Calendar, ShieldCheck, AtSign } from 'lucide-react'
+import { Waves, CheckCircle, User, Phone, Calendar, ShieldCheck, AtSign, Fingerprint } from 'lucide-react'
 
 export default function CadastroPublico() {
   const [enviado, setEnviado] = useState(false)
   const [loading, setLoading] = useState(false)
   const [nome, setNome] = useState('')
+  const [cpf, setCpf] = useState('') // Novo estado para o CPF
   const [telefone, setTelefone] = useState('')
   const [instagram, setInstagram] = useState('')
   const [nascimento, setNascimento] = useState('')
@@ -30,9 +31,10 @@ export default function CadastroPublico() {
       }]) 
 
     if (!errorAluno) {
-      // 2. Salva o Termo (USANDO OS NOMES EXATOS DAS COLUNAS DO SEU PRINT)
+      // 2. Salva o Termo (Agora incluindo o CPF)
       const { error: errorTermo } = await supabase.from('termos_assinados').insert([{
         nome_aluno: nome.trim(),
+        cpf: cpf.trim(), // Enviando o CPF para o banco
         aceitou_termos: true
       }])
       
@@ -85,6 +87,19 @@ export default function CadastroPublico() {
                 <input 
                   type="text" required placeholder="Seu nome completo"
                   value={nome} onChange={e => setNome(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-pink-500 transition-all font-semibold"
+                />
+              </div>
+            </div>
+
+            {/* CAMPO NOVO DE CPF */}
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 block ml-1">CPF</label>
+              <div className="relative">
+                <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                <input 
+                  type="text" required placeholder="000.000.000-00"
+                  value={cpf} onChange={e => setCpf(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-pink-500 transition-all font-semibold"
                 />
               </div>
