@@ -19,14 +19,15 @@ export default function CadastroPublico() {
     
     setLoading(true)
 
+    // CORREÇÃO MESTRE: Trocamos o 'upsert' por 'insert' padrão.
     const { error: errorAluno } = await supabase
       .from('alunos')
-      .upsert({ 
+      .insert([{ 
         nome: nome.trim(), 
         telefone: telefone.trim(), 
         instagram: instagram.trim(),
         data_nascimento: nascimento 
-      }, { onConflict: 'nome' }) 
+      }]) 
 
     if (!errorAluno) {
       const { error: errorTermo } = await supabase.from('termos_assinados').insert([{
