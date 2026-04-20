@@ -19,7 +19,7 @@ export default function CadastroPublico() {
     
     setLoading(true)
 
-    // CORREÇÃO MESTRE: Trocamos o 'upsert' por 'insert' padrão.
+    // 1. Salva o Aluno
     const { error: errorAluno } = await supabase
       .from('alunos')
       .insert([{ 
@@ -30,10 +30,10 @@ export default function CadastroPublico() {
       }]) 
 
     if (!errorAluno) {
+      // 2. Salva o Termo (USANDO OS NOMES EXATOS DAS COLUNAS DO SEU PRINT)
       const { error: errorTermo } = await supabase.from('termos_assinados').insert([{
-        nome_cliente: nome.trim(),
-        data_assinatura: new Date().toISOString(),
-        status: 'Assinado'
+        nome_aluno: nome.trim(),
+        aceitou_termos: true
       }])
       
       if (!errorTermo) {
