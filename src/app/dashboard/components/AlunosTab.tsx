@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-// CORREÇÃO: Trocamos o 'Instagram' por 'AtSign' aqui na linha de baixo
-import { Users, Search, UserPlus, Phone, AtSign, Calendar } from 'lucide-react'
+import { Users, Search, UserPlus, Phone, AtSign, Fingerprint } from 'lucide-react'
 
 export default function AlunosTab() {
   const [alunos, setAlunos] = useState<any[]>([])
@@ -12,14 +11,30 @@ export default function AlunosTab() {
 
   async function carregarAlunos() {
     setLoading(true)
-    const { data, error } = await supabase
+    
+    // 1. Busca todos os alunos
+    const { data: alunosData, error: alunosError } = await supabase
       .from('alunos')
       .select('*')
-      .order('created_at', { ascending: false }) 
+      .order('created_at', { ascending: false })
 
-    if (!error && data) {
-      setAlunos(data)
+    // 2. Busca os termos assinados para pegar os CPFs
+    const { data: termosData } = await supabase
+      .from('termos_assinados')
+      .select('nome_aluno, cpf')
+
+    if (!alunosError && alunosData) {
+      // 3. Junta o aluno com o seu respectivo CPF
+      const alunosComCpf = alunosData.map(aluno => {
+        const termo = termosData?.find(t => t.nome_aluno === aluno.nome)
+        return {
+          ...aluno,
+          cpf: termo?.cpf || 'Não informado'
+        }
+      })
+      setAlunos(alunosComCpf)
     }
+    
     setLoading(false)
   }
 
@@ -71,7 +86,9 @@ export default function AlunosTab() {
                   </div>
                   <div>
                     <h3 className="font-bold text-slate-800 leading-tight">{aluno.nome}</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Cadastrado em: {new Date(aluno.created_at).toLocaleDateString('pt-BR')}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                      Cadastrado em: {new Date(aluno.created_at).toLocaleDateString('pt-BR')}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -83,20 +100,20 @@ export default function AlunosTab() {
                   </span>
                   <span className="text-xs font-bold text-slate-700">{aluno.telefone}</span>
                 </div>
+                
                 <div className="bg-slate-50 rounded-xl p-3 flex flex-col gap-1">
                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter flex items-center gap-1">
-                    {/* CORREÇÃO: E trocamos o ícone aqui também */}
                     <AtSign size={10} /> Instagram
                   </span>
                   <span className="text-xs font-bold text-slate-700">{aluno.instagram || '---'}</span>
                 </div>
+
+                {/* Bloco do CPF ocupando a linha de baixo inteira */}
                 <div className="bg-slate-50 rounded-xl p-3 col-span-2 flex flex-col gap-1">
                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter flex items-center gap-1">
-                    <Calendar size={10} /> Nascimento
+                    <Fingerprint size={10} /> CPF
                   </span>
-                  <span className="text-xs font-bold text-slate-700">
-                    {aluno.data_nascimento ? new Date(aluno.data_nascimento).toLocaleDateString('pt-BR') : 'Não informado'}
-                  </span>
+                  <span className="text-xs font-bold text-slate-700">{aluno.cpf}</span>
                 </div>
               </div>
             </div>
