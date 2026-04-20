@@ -19,7 +19,8 @@ export default function CadastroPublico() {
     
     setLoading(true)
 
-    const { data: aluno, error: errorAluno } = await supabase
+    // AQUI ESTÁ A CORREÇÃO: Removemos o .select().single()
+    const { error: errorAluno } = await supabase
       .from('alunos')
       .upsert({ 
         nome: nome.trim(), 
@@ -27,16 +28,19 @@ export default function CadastroPublico() {
         instagram: instagram.trim(),
         data_nascimento: nascimento 
       }, { onConflict: 'nome' }) 
-      .select()
-      .single()
 
     if (!errorAluno) {
-      await supabase.from('termos_assinados').insert([{
+      const { error: errorTermo } = await supabase.from('termos_assinados').insert([{
         nome_cliente: nome.trim(),
         data_assinatura: new Date().toISOString(),
         status: 'Assinado'
       }])
-      setEnviado(true)
+      
+      if (!errorTermo) {
+        setEnviado(true)
+      } else {
+        alert("Erro ao registrar o termo. Tente novamente.")
+      }
     } else {
       alert("Erro ao processar cadastro. Tente novamente.")
     }
