@@ -84,8 +84,7 @@ export default function AulasTab() {
       .order('nome', { ascending: true })
     if (profs) setListaProfessores(profs.map(p => p.nome))
 
-    // VOLTOU PARA A VERSÃO LIMPA: Puxa apenas da tabela oficial de Alunos
-    const { data: alunos } = await supabase.from('alunos').select('id, nome').order('nome', { ascending: true })
+    const { data: alunos } = await supabase.from('alunos').select('id, nome').eq('excluido', false).order('nome', { ascending: true })
     if (alunos) setAlunosCadastrados(alunos)
   }, [])
 
@@ -93,16 +92,19 @@ export default function AulasTab() {
     setLoadingAulas(true)
     const hoje = hojeEmBrasilia()
 
+    // FILTRO 'excluido', false ADICIONADO
     const { data: dataHoje } = await supabase
       .from('registro_aulas')
       .select('*')
       .eq('data_aula', hoje)
+      .eq('excluido', false)
       .order('horario', { ascending: true })
 
     const { data: dataFuturas } = await supabase
       .from('registro_aulas')
       .select('*')
       .gt('data_aula', hoje)
+      .eq('excluido', false)
       .order('data_aula', { ascending: true })
       .order('horario', { ascending: true })
 
@@ -116,6 +118,7 @@ export default function AulasTab() {
       .from('pacotes')
       .select('*')
       .eq('status', 'Ativo')
+      .eq('excluido', false)
       .gt('aulas_restantes', 0)
       .order('nome_cliente', { ascending: true })
     setPacotes(data ?? [])
@@ -126,7 +129,7 @@ export default function AulasTab() {
   }, [carregarAulas, carregarPacotes, carregarDadosBase])
 
   async function excluirAula(aula: AulaComPagamento) {
-    if (!window.confirm(`Excluir a aula de "${aula.nome_cliente}"?`)) return
+    if (!window.confirm(`Arquivar a aula de "${aula.nome_cliente}"? (Ela sairá da agenda mas ficará salva no banco)`)) return
     setExcluindo(aula.id)
 
     if (aula.pacote_id) {
@@ -144,7 +147,8 @@ export default function AulasTab() {
       }
     }
 
-    const { error } = await supabase.from('registro_aulas').delete().eq('id', aula.id)
+    // SOFT DELETE: APENAS MARCA COMO EXCLUIDO
+    const { error } = await supabase.from('registro_aulas').update({ excluido: true }).eq('id', aula.id)
     
     setExcluindo(null)
     if (!error) {
@@ -408,7 +412,7 @@ export default function AulasTab() {
                 className="flex-1 bg-red-50 border border-red-200 text-red-600 font-bold text-xs py-2.5 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5"
               >
                 {excluindo === aula.id ? <span className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Trash2 size={14} />}
-                {excluindo === aula.id ? 'Excluindo...' : 'Remover Aula'}
+                {excluindo === aula.id ? 'Arquivando...' : 'Arquivar Aula'}
               </button>
             </div>
           </div>
@@ -516,7 +520,7 @@ export default function AulasTab() {
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" onClick={() => setModalAberto(false)} />
           
           <div 
-            className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-32 max-h-[90vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom-full duration-300"
+            className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-40 max-h-[90vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom-full duration-300"
             style={{ transform: `translateY(${dragOffset}px)` }}
           >
             

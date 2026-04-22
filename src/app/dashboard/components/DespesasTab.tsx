@@ -22,9 +22,11 @@ export default function DespesasTab() {
 
   async function carregarDespesas() {
     setLoading(true)
+    // FILTRA APENAS AS QUE NÃO FORAM EXCLUÍDAS
     const { data, error } = await supabase
       .from('despesas')
       .select('*')
+      .eq('excluido', false)
       .order('data_despesa', { ascending: false })
 
     if (!error) setDespesas(data || [])
@@ -60,8 +62,10 @@ export default function DespesasTab() {
   }
 
   async function excluirDespesa(id: string) {
-    if (!window.confirm("Eliminar esta despesa permanentemente?")) return
-    const { error } = await supabase.from('despesas').delete().eq('id', id)
+    if (!window.confirm("Arquivar esta despesa? Ela sairá do total mensal mas continuará no banco de dados.")) return
+    
+    // SOFT DELETE
+    const { error } = await supabase.from('despesas').update({ excluido: true }).eq('id', id)
     if (!error) carregarDespesas()
   }
 

@@ -22,10 +22,9 @@ interface ResumoProfessor {
   aulas: AulaDetalhe[]
 }
 
-// CORREÇÃO 2: Blinda a data contra horários do banco de dados
 function formatarDataCurta(dataStr: string) {
   if (!dataStr) return ''
-  const apenasData = dataStr.split('T')[0] // Tira a hora se tiver
+  const apenasData = dataStr.split('T')[0]
   const partes = apenasData.split('-')
   if (partes.length !== 3) return apenasData
   return `${partes[2]}/${partes[1]}`
@@ -40,15 +39,12 @@ export default function AcertoProfessores({ periodo }: AcertoProfessoresProps) {
     setLoading(true)
     let { inicio, fim } = getRange(periodo)
 
-    if (periodo === 'hoje') {
-        const tresDiasAtras = new Date()
-        tresDiasAtras.setDate(tresDiasAtras.getDate() - 3)
-        inicio = tresDiasAtras.toISOString().split('T')[0]
-    }
-
+    // Busca apenas as aulas não excluídas no período selecionado
     let aulasQ = supabase
       .from('registro_aulas')
       .select('id, data_aula, nome_cliente, nome_professor')
+      .eq('excluido', false)
+
     if (inicio) aulasQ = aulasQ.gte('data_aula', inicio)
     if (fim) aulasQ = aulasQ.lte('data_aula', fim)
 
@@ -109,7 +105,6 @@ export default function AcertoProfessores({ periodo }: AcertoProfessoresProps) {
     }
   }
 
-  // CORREÇÃO 1: Restaurar o cálculo do Total
   const totalPeriodo = resumo.reduce((s, r) => s + r.total, 0)
 
   if (loading) {
@@ -131,7 +126,6 @@ export default function AcertoProfessores({ periodo }: AcertoProfessoresProps) {
   return (
     <div className="flex flex-col gap-2">
       
-      {/* CORREÇÃO 1: Banner de Total Restaurado */}
       {totalPeriodo > 0 && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mx-2 mt-2 flex items-center justify-between">
           <div className="flex flex-col">

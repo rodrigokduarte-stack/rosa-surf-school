@@ -17,19 +17,19 @@ export default function AlunosTab() {
   const [salvando, setSalvando] = useState(false)
   const [alunoEditando, setAlunoEditando] = useState<string | null>(null)
   
-  // Guardamos o nome original para fazer a "Atualização em Cascata" no histórico
   const [nomeOriginal, setNomeOriginal] = useState('')
   
-  // Campos do formulário
   const [novoNome, setNovoNome] = useState('')
   const [novoTelefone, setNovoTelefone] = useState('')
   const [novoInstagram, setNovoInstagram] = useState('')
 
   async function carregarAlunos() {
     setLoading(true)
+    // FILTRA APENAS AS QUE NÃO FORAM EXCLUÍDAS
     const { data: alunosData, error: alunosError } = await supabase
       .from('alunos')
       .select('*')
+      .eq('excluido', false)
       .order('created_at', { ascending: false })
 
     const { data: termosData } = await supabase
@@ -62,7 +62,7 @@ export default function AlunosTab() {
   function abrirModalEditar(aluno: any) {
     setAlunoEditando(aluno.id)
     setNovoNome(aluno.nome)
-    setNomeOriginal(aluno.nome) // Grava quem ele era antes da edição
+    setNomeOriginal(aluno.nome) 
     setNovoTelefone(aluno.telefone || '')
     setNovoInstagram(aluno.instagram || '')
     setIsModalOpen(true)
@@ -82,25 +82,19 @@ export default function AlunosTab() {
     let error;
 
     if (alunoEditando) {
-      // 1. Atualiza o cadastro do aluno na tabela principal
       const response = await supabase
         .from('alunos')
         .update(payload)
         .eq('id', alunoEditando)
       error = response.error
 
-      // 2. A MÁGICA DA CASCATA: Se o nome mudou, atualiza o histórico todo!
       if (!error && nomeFormatado !== nomeOriginal) {
-        // Troca nas Aulas
         await supabase.from('registro_aulas').update({ nome_cliente: nomeFormatado }).eq('nome_cliente', nomeOriginal)
-        // Troca nos Pacotes
         await supabase.from('pacotes').update({ nome_cliente: nomeFormatado }).eq('nome_cliente', nomeOriginal)
-        // Troca nos Termos
         await supabase.from('termos_assinados').update({ nome_aluno: nomeFormatado }).eq('nome_aluno', nomeOriginal)
       }
 
     } else {
-      // MODO NOVO ALUNO
       const response = await supabase
         .from('alunos')
         .insert([payload])
@@ -241,13 +235,32 @@ export default function AlunosTab() {
               </div>
             </div>
 
-            <button 
-              disabled={salvando}
-              type="submit" 
-              className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all"
-            >
-              {salvando ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><CheckCircle size={20} /> Salvar Dados</>}
-            </button>
+            <div className="flex flex-col gap-3 mt-2">
+              <button 
+                disabled={salvando}
+                type="submit" 
+                className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all"
+              >
+                {salvando ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><CheckCircle size={20} /> Salvar Dados</>}
+              </button>
+
+              {/* BOTÃO PARA ARQUIVAR ALUNO (OPCIONAL) */}
+              {alunoEditando && (
+                <button 
+                  type="button"
+                  onClick={async () => {
+                    if (confirm("Arquivar este aluno? Ele sairá da lista principal.")) {
+                      await supabase.from('alunos').update({ excluido: true }).eq('id', alunoEditando)
+                      setIsModalOpen(false)
+                      carregarAlunos()
+                    }
+                  }}
+                  className="w-full text-rose-500 font-bold py-2 text-xs uppercase tracking-widest"
+                >
+                  Arquivar Aluno
+                </button>
+              )}
+            </div>
           </form>
         </div>
       )}

@@ -55,14 +55,16 @@ export default function FinanceiroTab() {
     let aulasQ = supabase
       .from('registro_aulas')
       .select('valor_aula, valor_pago, status_pagamento, nome_professor, forma_pagamento')
+      .eq('excluido', false)
+
     if (inicio) aulasQ = aulasQ.gte('data_aula', inicio)
     if (fim) aulasQ = aulasQ.lte('data_aula', fim)
 
-    let custosQ = supabase.from('registro_custos').select('valor_custo, categoria')
-    if (inicio) custosQ = custosQ.gte('data_custo', inicio)
-    if (fim) custosQ = custosQ.lte('data_custo', fim)
+    let custosQ = supabase.from('despesas').select('valor, categoria').eq('excluido', false)
+    if (inicio) custosQ = custosQ.gte('data_despesa', inicio)
+    if (fim) custosQ = custosQ.lte('data_despesa', fim)
 
-    const pacotesQ = supabase.from('pacotes').select('valor_total, valor_pago, aulas_restantes, forma_pagamento')
+    const pacotesQ = supabase.from('pacotes').select('valor_total, valor_pago, aulas_restantes, forma_pagamento').eq('excluido', false)
     const profsQ = supabase.from('professores').select('nome, valor_aula')
 
     const [{ data: aulas }, { data: custos }, { data: pacotes }, { data: profs }] = await Promise.all([aulasQ, custosQ, pacotesQ, profsQ])
@@ -80,7 +82,7 @@ export default function FinanceiroTab() {
     setBreakdownCategorias(
       custosList.reduce((acc, c) => {
         const cat = (c.categoria as string) || 'Outros'
-        acc[cat] = (acc[cat] ?? 0) + Number(c.valor_custo)
+        acc[cat] = (acc[cat] ?? 0) + Number(c.valor)
         return acc
       }, {} as Record<string, number>)
     )
@@ -109,13 +111,11 @@ export default function FinanceiroTab() {
     setBreakdownPagamentos(pagamentosMap)
 
     setDados({
-      // CORREÇÃO: Faturamento agora considera o que foi pago nas aulas parciais
       faturamentoBruto: aulasList.reduce((s, a) => {
         if (a.status_pagamento === 'Pago') return s + Number(a.valor_aula)
         if (a.status_pagamento === 'Parcial') return s + Number(a.valor_pago || 0)
         return s
       }, 0),
-      // CORREÇÃO: A Receber agora considera o que falta das aulas parciais
       aReceber: aulasList.reduce((s, a) => {
         if (a.status_pagamento === 'Pendente') return s + Number(a.valor_aula)
         if (a.status_pagamento === 'Parcial') return s + Math.max(0, Number(a.valor_aula) - Number(a.valor_pago || 0))
@@ -127,7 +127,7 @@ export default function FinanceiroTab() {
         const custoDessaAula = nomes.reduce((soma, nome) => soma + (profsMap[nome] ?? 100), 0)
         return s + custoDessaAula
       }, 0),
-      custosOperacionais: custosList.reduce((s, c) => s + Number(c.valor_custo), 0),
+      custosOperacionais: custosList.reduce((s, c) => s + Number(c.valor), 0),
       totalAulas: aulasList.length,
       receitaPacotes: pacotesList.reduce((s, p) => s + Number(p.valor_pago), 0),
       inadimplenciaPacotes: pacotesList.reduce((s, p) => s + Math.max(0, Number(p.valor_total) - Number(p.valor_pago)), 0),
@@ -142,6 +142,11 @@ export default function FinanceiroTab() {
   const lucroLiquido = dados.faturamentoBruto - dados.custoProfessores - dados.custosOperacionais
   const labelPeriodo = PERIODOS.find(p => p.id === periodo)?.label ?? ''
   const margem = dados.faturamentoBruto > 0 ? Math.round((lucroLiquido / dados.faturamentoBruto) * 100) : 0
+
+  const tituloPagamento = periodo === 'hoje' ? '💸 Quem Pagar Hoje' :
+                          periodo === 'semana' ? '💸 Quem Pagar na Semana' :
+                          periodo === 'mes' ? '💸 Quem Pagar no Mês' :
+                          '💸 Histórico de Pagamentos'
 
   return (
     <div className="px-4 py-2 flex flex-col gap-6" id="relatorio-financeiro">
@@ -315,11 +320,17 @@ export default function FinanceiroTab() {
             </div>
           )}
 
-          <div className="mt-2">
-            <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
-              <span className="w-2 h-2 rounded-full bg-pink-500 print:hidden" /> Acerto com a Equipe
-            </h3>
-            <div className="bg-white rounded-[20px] shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-100 p-2 print:shadow-none print:border-slate-200 print:p-0">
+          {/* NOVA SEÇÃO: QUEM PAGAR HOJE */}
+          <div className="mt-4 bg-slate-900 rounded-[24px] p-1.5 shadow-xl print:bg-none print:shadow-none print:p-0">
+            <div className="px-4 pt-4 pb-3 flex items-center justify-between">
+              <h3 className="text-[15px] font-black text-white flex items-center gap-2 print:text-slate-800">
+                {tituloPagamento}
+              </h3>
+              <span className="text-[9px] font-bold text-pink-400 uppercase tracking-widest bg-pink-400/10 px-2 py-0.5 rounded-full border border-pink-400/20 print:hidden">
+                Equipe
+              </span>
+            </div>
+            <div className="bg-white rounded-[20px] p-2 print:p-0 border border-slate-100/50">
               <AcertoProfessores periodo={periodo} />
             </div>
           </div>
