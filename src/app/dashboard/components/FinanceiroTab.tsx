@@ -52,6 +52,7 @@ export default function FinanceiroTab() {
     setLoading(true)
     const { inicio, fim } = getRange(p)
 
+    // Busca apenas dados não arquivados (excluido = false)
     let aulasQ = supabase
       .from('registro_aulas')
       .select('valor_aula, valor_pago, status_pagamento, nome_professor, forma_pagamento')
@@ -64,7 +65,11 @@ export default function FinanceiroTab() {
     if (inicio) custosQ = custosQ.gte('data_despesa', inicio)
     if (fim) custosQ = custosQ.lte('data_despesa', fim)
 
-    const pacotesQ = supabase.from('pacotes').select('valor_total, valor_pago, aulas_restantes, forma_pagamento').eq('excluido', false)
+    // Para pacotes, a data de referência financeira é a de criação
+    let pacotesQ = supabase.from('pacotes').select('valor_total, valor_pago, aulas_restantes, forma_pagamento, created_at').eq('excluido', false)
+    if (inicio) pacotesQ = pacotesQ.gte('created_at', inicio + 'T00:00:00Z')
+    if (fim) pacotesQ = pacotesQ.lte('created_at', fim + 'T23:59:59Z')
+
     const profsQ = supabase.from('professores').select('nome, valor_aula')
 
     const [{ data: aulas }, { data: custos }, { data: pacotes }, { data: profs }] = await Promise.all([aulasQ, custosQ, pacotesQ, profsQ])
@@ -110,17 +115,26 @@ export default function FinanceiroTab() {
 
     setBreakdownPagamentos(pagamentosMap)
 
+    // MATEMÁTICA CORRIGIDA (Soma Aulas + Pacotes)
+    const faturamentoAulas = aulasList.reduce((s, a) => {
+      if (a.status_pagamento === 'Pago') return s + Number(a.valor_aula)
+      if (a.status_pagamento === 'Parcial') return s + Number(a.valor_pago || 0)
+      return s
+    }, 0)
+
+    const faturamentoPacotes = pacotesList.reduce((s, p) => s + Number(p.valor_pago || 0), 0)
+
+    const aReceberAulas = aulasList.reduce((s, a) => {
+      if (a.status_pagamento === 'Pendente') return s + Number(a.valor_aula)
+      if (a.status_pagamento === 'Parcial') return s + Math.max(0, Number(a.valor_aula) - Number(a.valor_pago || 0))
+      return s
+    }, 0)
+
+    const aReceberPacotes = pacotesList.reduce((s, p) => s + Math.max(0, Number(p.valor_total) - Number(p.valor_pago || 0)), 0)
+
     setDados({
-      faturamentoBruto: aulasList.reduce((s, a) => {
-        if (a.status_pagamento === 'Pago') return s + Number(a.valor_aula)
-        if (a.status_pagamento === 'Parcial') return s + Number(a.valor_pago || 0)
-        return s
-      }, 0),
-      aReceber: aulasList.reduce((s, a) => {
-        if (a.status_pagamento === 'Pendente') return s + Number(a.valor_aula)
-        if (a.status_pagamento === 'Parcial') return s + Math.max(0, Number(a.valor_aula) - Number(a.valor_pago || 0))
-        return s
-      }, 0),
+      faturamentoBruto: faturamentoAulas + faturamentoPacotes,
+      aReceber: aReceberAulas + aReceberPacotes,
       custoProfessores: aulasList.reduce((s, a) => {
         const nomes = parseProfessores(a.nome_professor)
         if (!nomes || nomes.length === 0) return s + 100 
@@ -129,8 +143,8 @@ export default function FinanceiroTab() {
       }, 0),
       custosOperacionais: custosList.reduce((s, c) => s + Number(c.valor), 0),
       totalAulas: aulasList.length,
-      receitaPacotes: pacotesList.reduce((s, p) => s + Number(p.valor_pago), 0),
-      inadimplenciaPacotes: pacotesList.reduce((s, p) => s + Math.max(0, Number(p.valor_total) - Number(p.valor_pago)), 0),
+      receitaPacotes: faturamentoPacotes,
+      inadimplenciaPacotes: aReceberPacotes,
       aulasARealizar: pacotesList.reduce((s, p) => s + Number(p.aulas_restantes), 0),
     })
 
@@ -222,7 +236,7 @@ export default function FinanceiroTab() {
                   <Activity size={12} />
                   {margem}% Margem
                 </div>
-                <span className="text-xs font-medium text-slate-500">sobre o faturamento</span>
+                <span className="text-xs font-medium text-slate-500">sobre o faturamento global</span>
               </div>
             </div>
           </div>
@@ -320,7 +334,6 @@ export default function FinanceiroTab() {
             </div>
           )}
 
-          {/* NOVA SEÇÃO: QUEM PAGAR HOJE */}
           <div className="mt-4 bg-slate-900 rounded-[24px] p-1.5 shadow-xl print:bg-none print:shadow-none print:p-0">
             <div className="px-4 pt-4 pb-3 flex items-center justify-between">
               <h3 className="text-[15px] font-black text-white flex items-center gap-2 print:text-slate-800">
