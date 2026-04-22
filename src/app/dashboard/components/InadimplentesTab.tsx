@@ -4,7 +4,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { RegistroAula, Pacote } from '@/types'
 import { formatarValor, hojeEmBrasilia } from '@/lib/dateUtils'
-import { CheckCircle, MessageCircle, ChevronDown, ChevronUp, DollarSign, Wallet, CreditCard, Receipt, Calendar } from 'lucide-react'
+import { 
+  CheckCircle, MessageCircle, ChevronDown, ChevronUp, 
+  DollarSign, Wallet, CreditCard, Receipt, Calendar, 
+  Clock, FileText 
+} from 'lucide-react'
 
 type ItemDivida = {
   id: string
@@ -15,6 +19,8 @@ type ItemDivida = {
   valor_pago: number
   original_id: string
   dias_atraso: number
+  horario?: string      // NOVO: Adicionado para puxar o horário
+  observacoes?: string  // NOVO: Adicionado para puxar as notas
 }
 
 type DevedorAgrupado = {
@@ -23,7 +29,7 @@ type DevedorAgrupado = {
   telefone?: string
   valor_total: number
   valor_pago: number
-  dias_atraso: number // Pega o atraso do item mais velho
+  dias_atraso: number 
   itens: ItemDivida[]
 }
 
@@ -64,6 +70,9 @@ export default function InadimplentesTab() {
   const [loading, setLoading] = useState(true)
   const [expandido, setExpandido] = useState<string | null>(null)
   
+  // NOVO: Estado para controlar qual aula está expandida
+  const [itemExpandido, setItemExpandido] = useState<string | null>(null)
+  
   const [devedorSelecionado, setDevedorSelecionado] = useState<DevedorAgrupado | null>(null)
   const [valorRecebido, setValorRecebido] = useState<string>('')
   
@@ -73,9 +82,10 @@ export default function InadimplentesTab() {
   const carregarInadimplentes = useCallback(async () => {
     setLoading(true)
     
-    const { data: aulasData } = await supabase.from('registro_aulas').select('*').in('status_pagamento', ['Pendente', 'Parcial'])
-    const { data: pacotesData } = await supabase.from('pacotes').select('*')
-    const { data: alunosData } = await supabase.from('alunos').select('nome, telefone')
+    // Incluímos a trava 'excluido: false' por segurança
+    const { data: aulasData } = await supabase.from('registro_aulas').select('*').in('status_pagamento', ['Pendente', 'Parcial']).eq('excluido', false)
+    const { data: pacotesData } = await supabase.from('pacotes').select('*').eq('excluido', false)
+    const { data: alunosData } = await supabase.from('alunos').select('nome, telefone').eq('excluido', false)
     
     const telefonesMap: Record<string, string> = {}
     alunosData?.forEach((aluno: any) => {
@@ -109,7 +119,9 @@ export default function InadimplentesTab() {
         valor_total: Number(a.valor_aula),
         valor_pago: Number(a.valor_pago || 0),
         original_id: a.id,
-        dias_atraso: dias
+        dias_atraso: dias,
+        horario: a.horario,       // NOVO: Puxando do banco
+        observacoes: a.observacoes // NOVO: Puxando do banco
       })
     })
 
@@ -170,7 +182,7 @@ export default function InadimplentesTab() {
     const promessasAtualizacao = []
 
     for (const item of devedorSelecionado.itens) {
-      if (saldoRestante <= 0.001) break // Evita bugs de casas decimais
+      if (saldoRestante <= 0.001) break
 
       const faltaNesteItem = item.valor_total - item.valor_pago
       
@@ -210,7 +222,6 @@ export default function InadimplentesTab() {
   }
 
   function abrirWhatsApp(d: DevedorAgrupado) {
-    // Lista o que ele deve formatado
     const msgAulas = d.itens.map(i => `${i.descricao} (${formatarDataCurta(i.data_referencia)})`).join(', ')
     const texto = encodeURIComponent(`Olá, ${d.nome}! Passando para ver como estão as ondas e lembrar sobre o acerto pendente no valor de ${formatarValor(d.valor_total - d.valor_pago)}.\n\nRef: ${msgAulas}\n\nPodemos acertar? 🏄‍♂️`)
     
@@ -311,23 +322,62 @@ export default function InadimplentesTab() {
                           <Receipt size={12} className="text-slate-400" />
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Itens desta dívida</span>
                         </div>
+                        
                         <div className="flex flex-col gap-2">
-                          {dev.itens.map(item => (
-                            <div key={item.id} className="flex justify-between items-center bg-white border border-slate-200 p-2 rounded-lg shadow-sm">
-                              <div className="flex items-center gap-2">
-                                <div className="bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded flex items-center gap-1 text-[10px]">
-                                  <Calendar size={10} /> {formatarDataCurta(item.data_referencia)}
+                          {/* NOVO: Componentes de Aula Expandíveis */}
+                          {dev.itens.map(item => {
+                            const isItemExpanded = itemExpandido === item.id;
+                            
+                            return (
+                              <div key={item.id} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden transition-all">
+                                <div 
+                                  className={`flex justify-between items-center p-2.5 ${item.tipo === 'aula' ? 'cursor-pointer hover:bg-slate-50' : ''}`}
+                                  onClick={() => {
+                                    if (item.tipo === 'aula') {
+                                      setItemExpandido(isItemExpanded ? null : item.id)
+                                    }
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className="bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded flex items-center gap-1 text-[10px]">
+                                      <Calendar size={10} /> {formatarDataCurta(item.data_referencia)}
+                                    </div>
+                                    <span className="text-xs font-semibold text-slate-700">{item.descricao}</span>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="flex flex-col items-end">
+                                      <span className="font-bold text-slate-800 text-xs">{formatarValor(item.valor_total)}</span>
+                                      {item.valor_pago > 0 && (
+                                        <span className="text-[9px] text-slate-400">Pago: {formatarValor(item.valor_pago)}</span>
+                                      )}
+                                    </div>
+                                    {/* Setinha só aparece se for aula avulsa */}
+                                    {item.tipo === 'aula' && (
+                                      isItemExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />
+                                    )}
+                                  </div>
                                 </div>
-                                <span className="text-xs font-semibold text-slate-700">{item.descricao}</span>
-                              </div>
-                              <div className="flex flex-col items-end">
-                                <span className="font-bold text-slate-800 text-xs">{formatarValor(item.valor_total)}</span>
-                                {item.valor_pago > 0 && (
-                                  <span className="text-[9px] text-slate-400">Pago: {formatarValor(item.valor_pago)}</span>
+
+                                {/* Detalhes da Aula (Horário e Observações) */}
+                                {isItemExpanded && item.tipo === 'aula' && (
+                                  <div className="px-3 pb-3 pt-2 border-t border-slate-100 bg-slate-50/80 flex flex-col gap-2.5 animate-in slide-in-from-top-1 duration-200">
+                                    <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                                      <Clock size={12} className="text-slate-400" /> 
+                                      {item.horario ? item.horario : 'Horário não registrado'}
+                                    </div>
+                                    
+                                    {item.observacoes && (
+                                      <div className="flex items-start gap-2 text-xs text-slate-600">
+                                        <FileText size={12} className="text-slate-400 mt-0.5 shrink-0" />
+                                        <span className="italic leading-relaxed text-slate-500">{item.observacoes}</span>
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
 
