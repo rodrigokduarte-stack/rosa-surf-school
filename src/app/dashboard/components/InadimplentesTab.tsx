@@ -19,8 +19,8 @@ type ItemDivida = {
   valor_pago: number
   original_id: string
   dias_atraso: number
-  horario?: string      // NOVO: Adicionado para puxar o horário
-  observacoes?: string  // NOVO: Adicionado para puxar as notas
+  horario?: string      
+  observacoes?: string  
 }
 
 type DevedorAgrupado = {
@@ -70,19 +70,19 @@ export default function InadimplentesTab() {
   const [loading, setLoading] = useState(true)
   const [expandido, setExpandido] = useState<string | null>(null)
   
-  // NOVO: Estado para controlar qual aula está expandida
   const [itemExpandido, setItemExpandido] = useState<string | null>(null)
   
   const [devedorSelecionado, setDevedorSelecionado] = useState<DevedorAgrupado | null>(null)
-  const [valorRecebido, setValorRecebido] = useState<string>('')
   
+  // ESTADOS DO PAGAMENTO
+  const [valorRecebido, setValorRecebido] = useState<string>('')
+  const [valorDesconto, setValorDesconto] = useState<string>('') // NOVO: Estado do Desconto
   const [formaPagamento, setFormaPagamento] = useState<string>('Pix')
   const [processando, setProcessando] = useState(false)
 
   const carregarInadimplentes = useCallback(async () => {
     setLoading(true)
     
-    // Incluímos a trava 'excluido: false' por segurança
     const { data: aulasData } = await supabase.from('registro_aulas').select('*').in('status_pagamento', ['Pendente', 'Parcial']).eq('excluido', false)
     const { data: pacotesData } = await supabase.from('pacotes').select('*').eq('excluido', false)
     const { data: alunosData } = await supabase.from('alunos').select('nome, telefone').eq('excluido', false)
@@ -120,8 +120,8 @@ export default function InadimplentesTab() {
         valor_pago: Number(a.valor_pago || 0),
         original_id: a.id,
         dias_atraso: dias,
-        horario: a.horario,       // NOVO: Puxando do banco
-        observacoes: a.observacoes // NOVO: Puxando do banco
+        horario: a.horario,       
+        observacoes: a.observacoes 
       })
     })
 
@@ -157,12 +157,7 @@ export default function InadimplentesTab() {
 
     const listaFinal = Object.values(agrupados)
     
-    // Ordena os itens DENTRO do aluno do mais velho para o mais novo
-    listaFinal.forEach(dev => {
-      dev.itens.sort((a, b) => b.dias_atraso - a.dias_atraso)
-    })
-
-    // Ordena a lista de alunos para quem deve há mais tempo aparecer no topo
+    listaFinal.forEach(dev => dev.itens.sort((a, b) => b.dias_atraso - a.dias_atraso))
     listaFinal.sort((a, b) => b.dias_atraso - a.dias_atraso)
     
     setDevedores(listaFinal)
@@ -171,31 +166,44 @@ export default function InadimplentesTab() {
 
   useEffect(() => { carregarInadimplentes() }, [carregarInadimplentes])
 
-  // LÓGICA DE PAGAMENTO INTELIGENTE (FIFO: Abate a dívida mais velha primeiro)
+  // NOVO: Lógica de Pagamento com Desconto
   async function confirmarPagamento(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!devedorSelecionado || !valorRecebido || !formaPagamento) return
+    if (!devedorSelecionado || (!valorRecebido && !valorDesconto) || !formaPagamento) return
     
     setProcessando(true)
-    let saldoRestante = parseFloat(valorRecebido)
+    let saldoRestanteReal = parseFloat(valorRecebido) || 0
+    let saldoDesconto = parseFloat(valorDesconto) || 0
     
     const promessasAtualizacao = []
 
     for (const item of devedorSelecionado.itens) {
-      if (saldoRestante <= 0.001) break
+      if (saldoRestanteReal <= 0.001 && saldoDesconto <= 0.001) break
 
       const faltaNesteItem = item.valor_total - item.valor_pago
       
       if (faltaNesteItem > 0) {
-        const valorAAbater = Math.min(saldoRestante, faltaNesteItem)
-        const novoValorPago = item.valor_pago + valorAAbater
-        const quitouTotalmente = novoValorPago >= item.valor_total
+        // Primeiro abate com o dinheiro real que entrou
+        const abaterReal = Math.min(saldoRestanteReal, faltaNesteItem)
+        saldoRestanteReal -= abaterReal
+
+        // Se sobrou dívida nesse item, usa o desconto
+        const faltaAposReal = faltaNesteItem - abaterReal
+        const abaterDesconto = Math.min(saldoDesconto, faltaAposReal)
+        saldoDesconto -= abaterDesconto
+
+        const novoValorPago = item.valor_pago + abaterReal
+        // Mágica: Rebaxamos o teto da dívida para acomodar o desconto e não gerar "furo" no caixa
+        const novoValorTotal = item.valor_total - abaterDesconto 
+        
+        const quitouTotalmente = novoValorPago >= novoValorTotal
 
         if (item.tipo === 'aula') {
           promessasAtualizacao.push(
             supabase.from('registro_aulas').update({ 
               status_pagamento: quitouTotalmente ? 'Pago' : 'Parcial',
               valor_pago: novoValorPago,
+              valor_aula: novoValorTotal, // Atualiza o preço da aula
               forma_pagamento: formaPagamento
             }).eq('id', item.original_id)
           )
@@ -203,12 +211,11 @@ export default function InadimplentesTab() {
           promessasAtualizacao.push(
             supabase.from('pacotes').update({ 
               valor_pago: novoValorPago,
+              valor_total: novoValorTotal, // Atualiza o preço do pacote
               forma_pagamento: formaPagamento
             }).eq('id', item.original_id)
           )
         }
-        
-        saldoRestante -= valorAAbater
       }
     }
 
@@ -217,6 +224,7 @@ export default function InadimplentesTab() {
     setProcessando(false)
     setDevedorSelecionado(null)
     setValorRecebido('')
+    setValorDesconto('') // Limpa desconto
     setFormaPagamento('Pix') 
     carregarInadimplentes()
   }
@@ -324,7 +332,6 @@ export default function InadimplentesTab() {
                         </div>
                         
                         <div className="flex flex-col gap-2">
-                          {/* NOVO: Componentes de Aula Expandíveis */}
                           {dev.itens.map(item => {
                             const isItemExpanded = itemExpandido === item.id;
                             
@@ -352,21 +359,18 @@ export default function InadimplentesTab() {
                                         <span className="text-[9px] text-slate-400">Pago: {formatarValor(item.valor_pago)}</span>
                                       )}
                                     </div>
-                                    {/* Setinha só aparece se for aula avulsa */}
                                     {item.tipo === 'aula' && (
                                       isItemExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />
                                     )}
                                   </div>
                                 </div>
 
-                                {/* Detalhes da Aula (Horário e Observações) */}
                                 {isItemExpanded && item.tipo === 'aula' && (
                                   <div className="px-3 pb-3 pt-2 border-t border-slate-100 bg-slate-50/80 flex flex-col gap-2.5 animate-in slide-in-from-top-1 duration-200">
                                     <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
                                       <Clock size={12} className="text-slate-400" /> 
                                       {item.horario ? item.horario : 'Horário não registrado'}
                                     </div>
-                                    
                                     {item.observacoes && (
                                       <div className="flex items-start gap-2 text-xs text-slate-600">
                                         <FileText size={12} className="text-slate-400 mt-0.5 shrink-0" />
@@ -389,7 +393,12 @@ export default function InadimplentesTab() {
                         Notificar via WhatsApp
                       </button>
                       <button 
-                        onClick={() => { setDevedorSelecionado(dev); setValorRecebido(restante.toString()); setFormaPagamento('Pix'); }} 
+                        onClick={() => { 
+                          setDevedorSelecionado(dev); 
+                          setValorRecebido(restante.toString()); 
+                          setValorDesconto(''); // zera o desconto
+                          setFormaPagamento('Pix'); 
+                        }} 
                         className={`w-full text-white font-black text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-sm ${cfg.badge}`}
                       >
                         <DollarSign size={16} /> 
@@ -408,7 +417,10 @@ export default function InadimplentesTab() {
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div 
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" 
-            onClick={() => setDevedorSelecionado(null)} 
+            onClick={() => {
+              setDevedorSelecionado(null);
+              setValorDesconto('');
+            }} 
           />
           
           <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-32 shadow-2xl animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] overflow-y-auto">
@@ -439,15 +451,14 @@ export default function InadimplentesTab() {
               
               <div>
                 <label className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 block">
-                  Quanto o cliente pagou agora?
+                  Quanto o cliente pagou agora? (Real)
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R$</span>
                   <input 
                     type="number" 
                     step="0.01" 
-                    min="0.01"
-                    max={devedorSelecionado.valor_total - devedorSelecionado.valor_pago}
+                    min="0"
                     value={valorRecebido}
                     onChange={e => setValorRecebido(e.target.value)}
                     required
@@ -456,17 +467,43 @@ export default function InadimplentesTab() {
                 </div>
               </div>
 
+              {/* NOVO: CAMPO DE DESCONTO */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex justify-between items-center">
+                  <span>Teve desconto na negociação?</span>
+                  <span className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded text-[9px]">OPCIONAL</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">R$</span>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    min="0"
+                    value={valorDesconto}
+                    onChange={e => setValorDesconto(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-base font-bold text-slate-700 focus:outline-none focus:border-pink-500 transition-colors"
+                  />
+                </div>
+              </div>
+
               <div className="flex gap-2 mb-2">
                  <button 
                     type="button" 
-                    onClick={() => setValorRecebido(((devedorSelecionado.valor_total - devedorSelecionado.valor_pago) / 2).toFixed(2))} 
+                    onClick={() => {
+                      setValorRecebido(((devedorSelecionado.valor_total - devedorSelecionado.valor_pago) / 2).toFixed(2))
+                      setValorDesconto('')
+                    }} 
                     className="flex-1 bg-slate-50 text-slate-600 font-bold text-sm py-3 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors"
                   >
                     Metade (50%)
                   </button>
                  <button 
                     type="button" 
-                    onClick={() => setValorRecebido((devedorSelecionado.valor_total - devedorSelecionado.valor_pago).toString())} 
+                    onClick={() => {
+                      setValorRecebido((devedorSelecionado.valor_total - devedorSelecionado.valor_pago).toString())
+                      setValorDesconto('')
+                    }} 
                     className="flex-1 bg-emerald-50 text-emerald-600 font-bold text-sm py-3 rounded-xl border border-emerald-200 hover:bg-emerald-100 transition-colors"
                   >
                     Quitar Tudo
@@ -503,7 +540,10 @@ export default function InadimplentesTab() {
               
               <button 
                 type="button" 
-                onClick={() => setDevedorSelecionado(null)} 
+                onClick={() => {
+                  setDevedorSelecionado(null);
+                  setValorDesconto('');
+                }} 
                 className="w-full py-3 text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors mt-2"
               >
                 Cancelar
