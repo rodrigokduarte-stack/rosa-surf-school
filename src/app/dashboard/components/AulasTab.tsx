@@ -8,7 +8,8 @@ import { hojeEmBrasilia, formatarValor } from '@/lib/dateUtils'
 import {
   Plus, Clock, User, DollarSign,
   ChevronDown, ChevronUp, CheckCircle, 
-  Package, Trash2, Calendar, X, GraduationCap, Waves, CalendarDays, AlertCircle
+  Package, Trash2, Calendar, X, GraduationCap, 
+  Waves, CalendarDays, AlertCircle, Grid, List // NOVO: Ícones adicionados
 } from 'lucide-react'
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
@@ -40,7 +41,8 @@ function formatarDataHeader(dataStr: string) {
 }
 
 export default function AulasTab() {
-  const [abaVisivel, setAbaVisivel] = useState<'hoje' | 'programadas'>('hoje')
+  // NOVO: Adicionado 'calendario' nas opções de aba
+  const [abaVisivel, setAbaVisivel] = useState<'hoje' | 'programadas' | 'calendario'>('hoje')
   
   const [aulasHoje, setAulasHoje] = useState<AulaComPagamento[]>([])
   const [aulasProgramadas, setAulasProgramadas] = useState<AulaComPagamento[]>([])
@@ -49,6 +51,9 @@ export default function AulasTab() {
   
   const [modalAberto, setModalAberto] = useState(false)
   const [cardExpandido, setCardExpandido] = useState<string | null>(null)
+  
+  // NOVO: Estado para abrir o cartão da aula direto da grade do calendário
+  const [aulaDetalheGrade, setAulaDetalheGrade] = useState<AulaComPagamento | null>(null)
   
   const [listaProfessores, setListaProfessores] = useState<string[]>([])
   const [professores, setProfessores] = useState<string[]>([])
@@ -160,6 +165,7 @@ export default function AulasTab() {
     if (!error) {
       setAulasHoje(prev => prev.filter(a => a.id !== aula.id))
       setAulasProgramadas(prev => prev.filter(a => a.id !== aula.id))
+      setAulaDetalheGrade(null) // Fecha o modal se estiver aberto
       carregarPacotes() 
     }
   }
@@ -273,6 +279,17 @@ export default function AulasTab() {
     }
     setDragOffset(0) 
   }
+
+  // NOVO: Lógica da Grade do Calendário (7 dias a partir de hoje)
+  const [ano, mes, dia] = hojeEmBrasilia().split('-')
+  const dataBase = new Date(Number(ano), Number(mes) - 1, Number(dia))
+  const diasGrid = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(dataBase)
+    d.setDate(d.getDate() + i)
+    return d
+  })
+  const nomesDias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+  const todasAulas = [...aulasHoje, ...aulasProgramadas]
 
   const renderCard = (aula: AulaComPagamento) => {
     const expandido = cardExpandido === aula.id
@@ -452,22 +469,31 @@ export default function AulasTab() {
           </div>
         </div>
 
+        {/* NOVO: Menu triplo com a Grade */}
         <div className="flex bg-slate-200/50 p-1.5 rounded-[16px]">
           <button
             onClick={() => setAbaVisivel('hoje')}
-            className={`flex-1 py-2.5 rounded-[12px] text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+            className={`flex-1 py-2.5 rounded-[12px] text-[13px] font-bold flex items-center justify-center gap-1.5 transition-all ${
               abaVisivel === 'hoje' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            <Waves size={16} strokeWidth={abaVisivel === 'hoje' ? 2.5 : 2} /> Hoje
+            <Waves size={14} strokeWidth={abaVisivel === 'hoje' ? 2.5 : 2} /> Hoje
           </button>
           <button
             onClick={() => setAbaVisivel('programadas')}
-            className={`flex-1 py-2.5 rounded-[12px] text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+            className={`flex-1 py-2.5 rounded-[12px] text-[13px] font-bold flex items-center justify-center gap-1.5 transition-all ${
               abaVisivel === 'programadas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            <CalendarDays size={16} strokeWidth={abaVisivel === 'programadas' ? 2.5 : 2} /> Programadas
+            <List size={14} strokeWidth={abaVisivel === 'programadas' ? 2.5 : 2} /> Lista
+          </button>
+          <button
+            onClick={() => setAbaVisivel('calendario')}
+            className={`flex-1 py-2.5 rounded-[12px] text-[13px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+              abaVisivel === 'calendario' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Grid size={14} strokeWidth={abaVisivel === 'calendario' ? 2.5 : 2} /> Grade
           </button>
         </div>
 
@@ -475,6 +501,78 @@ export default function AulasTab() {
           {loadingAulas ? (
             <div className="flex justify-center py-10">
               <div className="w-7 h-7 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : abaVisivel === 'calendario' ? (
+            /* NOVO: VISÃO DE GRADE SEMANAL */
+            <div className="bg-white rounded-[24px] shadow-[0_2px_16px_rgba(0,0,0,0.04)] border border-slate-100 overflow-hidden flex flex-col mb-24 animate-in fade-in duration-300">
+              <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                <h3 className="font-bold text-slate-700 text-[13px]">Próximos 7 Dias</h3>
+                <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest bg-white px-2 py-1 rounded-md border border-slate-200">Arraste 👉</span>
+              </div>
+              <div className="overflow-x-auto pb-2">
+                <div className="min-w-[700px] flex">
+                  
+                  {/* Coluna de Horas */}
+                  <div className="w-14 flex-shrink-0 border-r border-slate-100 bg-slate-50/50">
+                    <div className="h-12 border-b border-slate-100" />
+                    {OPCOES_HORARIOS.map(hora => (
+                      <div key={hora} className="h-12 border-b border-slate-100 text-[9px] font-black text-slate-400 flex items-center justify-center relative">
+                        {hora.endsWith(':00') ? <span className="-mt-6">{hora}</span> : ''}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Colunas dos Dias */}
+                  {diasGrid.map((dia, index) => {
+                    const dataStr = dia.toISOString().split('T')[0]
+                    return (
+                      <div key={dataStr} className={`flex-1 border-r border-slate-100 relative ${index === 0 ? 'bg-pink-50/30' : ''}`}>
+                        <div className={`h-12 border-b border-slate-100 flex flex-col items-center justify-center ${index === 0 ? 'bg-pink-50' : 'bg-white'}`}>
+                          <span className={`text-[9px] font-black uppercase tracking-widest ${index === 0 ? 'text-pink-500' : 'text-slate-400'}`}>
+                            {index === 0 ? 'Hoje' : nomesDias[dia.getDay()]}
+                          </span>
+                          <span className={`text-sm font-black ${index === 0 ? 'text-pink-600' : 'text-slate-800'}`}>
+                            {dia.getDate().toString().padStart(2, '0')}
+                          </span>
+                        </div>
+                        
+                        {OPCOES_HORARIOS.map(hora => {
+                          const aulasNesteHorario = todasAulas.filter(a => a.data_aula === dataStr && a.horario === hora)
+                          
+                          return (
+                            <div key={hora} className="h-12 border-b border-slate-100/50 p-0.5 flex gap-0.5 relative">
+                              {aulasNesteHorario.map(aulaAqui => {
+                                const corBg = aulaAqui.status_pagamento === 'Pago' ? 'bg-emerald-100 border-emerald-200 text-emerald-700' :
+                                              aulaAqui.status_pagamento === 'Parcial' ? 'bg-amber-100 border-amber-200 text-amber-700' :
+                                              'bg-pink-100 border-pink-200 text-pink-700';
+                                
+                                const arrayProfs = Array.isArray(aulaAqui.nome_professor) ? aulaAqui.nome_professor : aulaAqui.nome_professor ? [aulaAqui.nome_professor] : [];
+                                const semProf = arrayProfs.length === 0;
+
+                                return (
+                                  <div 
+                                    key={aulaAqui.id} 
+                                    onClick={() => { 
+                                      setAulaDetalheGrade(aulaAqui); 
+                                      setCardExpandido(aulaAqui.id); 
+                                    }}
+                                    className={`flex-1 rounded-[6px] p-1 cursor-pointer border flex flex-col justify-center gap-[1px] shadow-sm overflow-hidden ${corBg} ${semProf ? 'ring-2 ring-red-400 ring-inset' : ''}`}
+                                  >
+                                    <span className="text-[8px] font-black truncate leading-none">{aulaAqui.nome_cliente}</span>
+                                    <span className="text-[7px] font-bold uppercase opacity-70 truncate leading-none">
+                                      {semProf ? 'SEM PROF' : arrayProfs[0].split(' ')[0]}
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           ) : abaVisivel === 'hoje' ? (
             aulasHoje.length === 0 ? (
@@ -484,7 +582,7 @@ export default function AulasTab() {
                 <p className="text-slate-400 text-xs mt-1">Nenhuma aula registrada para hoje.</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 pb-24">
                 {aulasHoje.map(renderCard)}
               </div>
             )
@@ -496,7 +594,7 @@ export default function AulasTab() {
                 <p className="text-slate-400 text-xs mt-1">Nenhuma aula agendada para os próximos dias.</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-6 pb-24">
                 {Object.entries(aulasAgrupadas).map(([dataStr, aulasDoDia]) => (
                   <div key={dataStr}>
                     <h3 className="text-[13px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-3 ml-2">
@@ -521,6 +619,7 @@ export default function AulasTab() {
         <Plus size={28} strokeWidth={2.5} />
       </button>
 
+      {/* Modal para adicionar nova aula */}
       {modalAberto && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" onClick={() => setModalAberto(false)} />
@@ -705,6 +804,25 @@ export default function AulasTab() {
                 {salvando ? 'Adicionando...' : 'Adicionar Aula'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* NOVO: Janela Flutuante para visualizar/editar aula direto da Grade do Calendário */}
+      {aulaDetalheGrade && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center">
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm transition-opacity" onClick={() => setAulaDetalheGrade(null)} />
+          <div className="relative w-full max-w-md pb-8 px-4 animate-in slide-in-from-bottom-4 duration-300">
+             <div className="flex justify-end mb-3">
+               <button 
+                  onClick={() => setAulaDetalheGrade(null)} 
+                  className="w-10 h-10 bg-white/20 backdrop-blur-md border border-white/30 rounded-full flex items-center justify-center text-white hover:bg-white/30 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+             </div>
+             {/* Reutilizamos o MESMO renderCard, sem precisar duplicar código de arquivar/editar professor */}
+             {renderCard(aulaDetalheGrade)}
           </div>
         </div>
       )}
