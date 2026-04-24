@@ -9,12 +9,12 @@ import {
   Plus, Clock, User, DollarSign,
   ChevronDown, ChevronUp, CheckCircle, 
   Package, Trash2, Calendar, X, GraduationCap, 
-  Waves, CalendarDays, AlertCircle, Grid, List // NOVO: Ícones adicionados
+  Waves, CalendarDays, AlertCircle, Grid, List
 } from 'lucide-react'
 
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
 
-// GERA OS HORÁRIOS DE 30 EM 30 MINUTOS (06h até 19h)
+// GERA OS HORÁRIOS PARA O FORMULÁRIO (06h até 19h completos)
 const OPCOES_HORARIOS = Array.from({ length: 27 }, (_, i) => {
   const hora = Math.floor(i / 2) + 6
   const minuto = i % 2 === 0 ? '00' : '30'
@@ -40,8 +40,15 @@ function formatarDataHeader(dataStr: string) {
   return `${nomeDia}, ${dia}/${mes}`
 }
 
+// FORMATADOR SEGURO PARA A GRADE
+function formatarDataISO(d: Date) {
+  const a = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${a}-${m}-${dd}`;
+}
+
 export default function AulasTab() {
-  // NOVO: Adicionado 'calendario' nas opções de aba
   const [abaVisivel, setAbaVisivel] = useState<'hoje' | 'programadas' | 'calendario'>('hoje')
   
   const [aulasHoje, setAulasHoje] = useState<AulaComPagamento[]>([])
@@ -51,8 +58,6 @@ export default function AulasTab() {
   
   const [modalAberto, setModalAberto] = useState(false)
   const [cardExpandido, setCardExpandido] = useState<string | null>(null)
-  
-  // NOVO: Estado para abrir o cartão da aula direto da grade do calendário
   const [aulaDetalheGrade, setAulaDetalheGrade] = useState<AulaComPagamento | null>(null)
   
   const [listaProfessores, setListaProfessores] = useState<string[]>([])
@@ -165,7 +170,7 @@ export default function AulasTab() {
     if (!error) {
       setAulasHoje(prev => prev.filter(a => a.id !== aula.id))
       setAulasProgramadas(prev => prev.filter(a => a.id !== aula.id))
-      setAulaDetalheGrade(null) // Fecha o modal se estiver aberto
+      setAulaDetalheGrade(null)
       carregarPacotes() 
     }
   }
@@ -280,7 +285,7 @@ export default function AulasTab() {
     setDragOffset(0) 
   }
 
-  // NOVO: Lógica da Grade do Calendário (7 dias a partir de hoje)
+  // --- LÓGICA DO CALENDÁRIO INTELIGENTE ---
   const [ano, mes, dia] = hojeEmBrasilia().split('-')
   const dataBase = new Date(Number(ano), Number(mes) - 1, Number(dia))
   const diasGrid = Array.from({ length: 7 }, (_, i) => {
@@ -290,6 +295,39 @@ export default function AulasTab() {
   })
   const nomesDias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const todasAulas = [...aulasHoje, ...aulasProgramadas]
+
+  const dataStrSemana = diasGrid.map(d => formatarDataISO(d))
+  const aulasNaSemana = todasAulas.filter(a => dataStrSemana.includes(a.data_aula))
+
+  let minHour = 24
+  let maxHour = 0
+
+  if (aulasNaSemana.length === 0) {
+    // Se a semana está vazia, mostra só a manhã para não ocupar espaço à toa
+    minHour = 8
+    maxHour = 12
+  } else {
+    // Escaneia a semana para achar a primeira e a última aula
+    aulasNaSemana.forEach(a => {
+      if (a.horario) {
+        const h = parseInt(a.horario.split(':')[0], 10)
+        if (!isNaN(h)) {
+          if (h < minHour) minHour = h
+          if (h > maxHour) maxHour = h
+        }
+      }
+    })
+  }
+
+  // Adiciona 1 hora de margem antes e depois (limitado entre 06h e 19h)
+  const startHour = Math.max(6, minHour - 1)
+  const endHour = Math.min(19, maxHour + 1)
+
+  // Filtra apenas os horários necessários para a tela do Calendário
+  const HORARIOS_VISIVEIS = OPCOES_HORARIOS.filter(horaStr => {
+    const h = parseInt(horaStr.split(':')[0], 10)
+    return h >= startHour && h <= endHour
+  })
 
   const renderCard = (aula: AulaComPagamento) => {
     const expandido = cardExpandido === aula.id
@@ -469,7 +507,7 @@ export default function AulasTab() {
           </div>
         </div>
 
-        {/* NOVO: Menu triplo com a Grade */}
+        {/* TABS ATUALIZADAS (Hoje / Agendadas / Calendário) */}
         <div className="flex bg-slate-200/50 p-1.5 rounded-[16px]">
           <button
             onClick={() => setAbaVisivel('hoje')}
@@ -485,7 +523,7 @@ export default function AulasTab() {
               abaVisivel === 'programadas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            <List size={14} strokeWidth={abaVisivel === 'programadas' ? 2.5 : 2} /> Lista
+            <List size={14} strokeWidth={abaVisivel === 'programadas' ? 2.5 : 2} /> Agendadas
           </button>
           <button
             onClick={() => setAbaVisivel('calendario')}
@@ -493,7 +531,7 @@ export default function AulasTab() {
               abaVisivel === 'calendario' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            <Grid size={14} strokeWidth={abaVisivel === 'calendario' ? 2.5 : 2} /> Grade
+            <Grid size={14} strokeWidth={abaVisivel === 'calendario' ? 2.5 : 2} /> Calendário
           </button>
         </div>
 
@@ -503,7 +541,7 @@ export default function AulasTab() {
               <div className="w-7 h-7 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : abaVisivel === 'calendario' ? (
-            /* NOVO: VISÃO DE GRADE SEMANAL */
+            /* VISÃO DE CALENDÁRIO COM ALTURA DINÂMICA */
             <div className="bg-white rounded-[24px] shadow-[0_2px_16px_rgba(0,0,0,0.04)] border border-slate-100 overflow-hidden flex flex-col mb-24 animate-in fade-in duration-300">
               <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                 <h3 className="font-bold text-slate-700 text-[13px]">Próximos 7 Dias</h3>
@@ -515,7 +553,7 @@ export default function AulasTab() {
                   {/* Coluna de Horas */}
                   <div className="w-14 flex-shrink-0 border-r border-slate-100 bg-slate-50/50">
                     <div className="h-12 border-b border-slate-100" />
-                    {OPCOES_HORARIOS.map(hora => (
+                    {HORARIOS_VISIVEIS.map(hora => (
                       <div key={hora} className="h-12 border-b border-slate-100 text-[9px] font-black text-slate-400 flex items-center justify-center relative">
                         {hora.endsWith(':00') ? <span className="-mt-6">{hora}</span> : ''}
                       </div>
@@ -524,7 +562,7 @@ export default function AulasTab() {
 
                   {/* Colunas dos Dias */}
                   {diasGrid.map((dia, index) => {
-                    const dataStr = dia.toISOString().split('T')[0]
+                    const dataStr = formatarDataISO(dia)
                     return (
                       <div key={dataStr} className={`flex-1 border-r border-slate-100 relative ${index === 0 ? 'bg-pink-50/30' : ''}`}>
                         <div className={`h-12 border-b border-slate-100 flex flex-col items-center justify-center ${index === 0 ? 'bg-pink-50' : 'bg-white'}`}>
@@ -536,7 +574,7 @@ export default function AulasTab() {
                           </span>
                         </div>
                         
-                        {OPCOES_HORARIOS.map(hora => {
+                        {HORARIOS_VISIVEIS.map(hora => {
                           const aulasNesteHorario = todasAulas.filter(a => a.data_aula === dataStr && a.horario === hora)
                           
                           return (
@@ -808,7 +846,7 @@ export default function AulasTab() {
         </div>
       )}
 
-      {/* NOVO: Janela Flutuante para visualizar/editar aula direto da Grade do Calendário */}
+      {/* Janela Flutuante para visualizar/editar aula direto da Grade do Calendário */}
       {aulaDetalheGrade && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center">
           <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm transition-opacity" onClick={() => setAulaDetalheGrade(null)} />
@@ -821,7 +859,6 @@ export default function AulasTab() {
                   <X size={20} />
                 </button>
              </div>
-             {/* Reutilizamos o MESMO renderCard, sem precisar duplicar código de arquivar/editar professor */}
              {renderCard(aulaDetalheGrade)}
           </div>
         </div>
