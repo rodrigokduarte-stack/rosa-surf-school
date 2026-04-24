@@ -507,7 +507,7 @@ export default function AulasTab() {
           </div>
         </div>
 
-        {/* TABS ATUALIZADAS (Hoje / Agendadas / Calendário) */}
+        {/* TABS ATUALIZADAS (Hoje / Programadas / Calendário) */}
         <div className="flex bg-slate-200/50 p-1.5 rounded-[16px]">
           <button
             onClick={() => setAbaVisivel('hoje')}
@@ -523,7 +523,7 @@ export default function AulasTab() {
               abaVisivel === 'programadas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            <List size={14} strokeWidth={abaVisivel === 'programadas' ? 2.5 : 2} /> Agendadas
+            <List size={14} strokeWidth={abaVisivel === 'programadas' ? 2.5 : 2} /> Programadas
           </button>
           <button
             onClick={() => setAbaVisivel('calendario')}
