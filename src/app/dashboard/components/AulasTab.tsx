@@ -146,41 +146,53 @@ export default function AulasTab() {
     }
   }
 
+  // --- NOVA FUNÇÃO ONSUBMIT (COM TRATAMENTO DE ERROS PARA NÃO TRAVAR A TELA) ---
   async function onSubmit(dados: FormData) {
-    setSalvando(true)
-    const nomeDigitado = dados.nome_cliente.trim()
-    const { data: checkCRM } = await supabase.from('alunos').select('id').ilike('nome', nomeDigitado).limit(1)
-    
-    if (!checkCRM || checkCRM.length === 0) {
-      await supabase.from('alunos').insert([{ nome: nomeDigitado }])
-      carregarDadosBase() 
-    }
-    
-    let valorFinalPago = 0
-    if (dados.status_pagamento === 'Pago') valorFinalPago = Number(dados.valor_aula)
-    else if (dados.status_pagamento === 'Parcial') valorFinalPago = Number(dados.valor_pago) || 0
+    try {
+      setSalvando(true)
 
-    const payload = { 
-      ...dados, 
-      nome_cliente: nomeDigitado, 
-      nome_professor: professores, 
-      pacote_id: pacoteSelecionado || null, 
-      valor_pago: valorFinalPago 
-    }
-    
-    const { error } = await supabase.from('registro_aulas').insert([payload])
-
-    if (!error && pacoteSelecionado) {
-      const pacote = pacotes.find(p => p.id === pacoteSelecionado)
-      if (pacote && pacote.aulas_restantes > 0) {
-        const novasRestantes = pacote.aulas_restantes - 1
-        await supabase.from('pacotes').update({ aulas_restantes: novasRestantes, status: novasRestantes === 0 ? 'Finalizado' : 'Ativo' }).eq('id', pacoteSelecionado)
-        carregarPacotes()
+      const nomeDigitado = dados.nome_cliente.trim()
+      const { data: checkCRM } = await supabase.from('alunos').select('id').ilike('nome', nomeDigitado).limit(1)
+      
+      if (!checkCRM || checkCRM.length === 0) {
+        await supabase.from('alunos').insert([{ nome: nomeDigitado }])
+        carregarDadosBase() 
       }
-    }
+      
+      let valorFinalPago = 0
+      if (dados.status_pagamento === 'Pago') valorFinalPago = Number(dados.valor_aula) || 0
+      else if (dados.status_pagamento === 'Parcial') valorFinalPago = Number(dados.valor_pago) || 0
 
-    setSalvando(false)
-    if (!error) {
+      // Garante que o valor da aula não vá vazio para o banco de dados
+      const valorAulaSeguro = pacoteSelecionado ? 0 : (Number(dados.valor_aula) || 0)
+
+      const payload = { 
+        ...dados, 
+        nome_cliente: nomeDigitado, 
+        nome_professor: professores, 
+        pacote_id: pacoteSelecionado || null, 
+        valor_pago: valorFinalPago,
+        valor_aula: valorAulaSeguro
+      }
+      
+      const { error } = await supabase.from('registro_aulas').insert([payload])
+
+      if (error) {
+        alert("Erro no Banco de Dados: " + error.message)
+        setSalvando(false)
+        return // Impede o modal de fechar se deu erro
+      }
+
+      if (pacoteSelecionado) {
+        const pacote = pacotes.find(p => p.id === pacoteSelecionado)
+        if (pacote && pacote.aulas_restantes > 0) {
+          const novasRestantes = pacote.aulas_restantes - 1
+          await supabase.from('pacotes').update({ aulas_restantes: novasRestantes, status: novasRestantes === 0 ? 'Finalizado' : 'Ativo' }).eq('id', pacoteSelecionado)
+          carregarPacotes()
+        }
+      }
+
+      setSalvando(false)
       reset({ 
         data_aula: hojeEmBrasilia(), horario: '', nome_cliente: '', valor_aula: undefined, 
         valor_pago: undefined, modalidade: 'Aula Particular', status_pagamento: 'Pendente', 
@@ -188,6 +200,10 @@ export default function AulasTab() {
       })
       setProfessores([]); setPacoteSelecionado(''); carregarAulas()
       setModalAberto(false) 
+
+    } catch (err) {
+      alert("Ocorreu um erro inesperado. Verifique os campos e tente novamente.")
+      setSalvando(false)
     }
   }
 
@@ -415,6 +431,7 @@ export default function AulasTab() {
 
       <button onClick={() => setModalAberto(true)} className="fixed bottom-[88px] right-5 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-[0_4px_20px_rgba(232,67,106,0.45)] flex items-center justify-center z-40 hover:scale-105 active:scale-95 transition-all"><Plus size={28} strokeWidth={2.5} /></button>
 
+      {/* MODAL DE ADICIONAR AULA */}
       {modalAberto && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setModalAberto(false)} />
@@ -422,6 +439,7 @@ export default function AulasTab() {
             <div className="w-full pb-6 pt-2 -mt-4 flex justify-center cursor-grab active:cursor-grabbing" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}><div className="w-12 h-1.5 bg-slate-200 rounded-full" /></div>
             <div className="flex items-center justify-between mb-6"><div><h3 className="text-xl font-black text-slate-800">Nova Aula</h3><p className="text-sm text-slate-500 mt-0.5">Preencha os dados do aluno</p></div><button onClick={() => setModalAberto(false)} className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"><X size={18} /></button></div>
             
+            {/* O "onSubmit" agora trata os erros para não travar */}
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col"><label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Calendar size={14}/> Data da Aula</label><input type="date" {...register('data_aula', { required: true })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all" /></div>
@@ -465,7 +483,10 @@ export default function AulasTab() {
 
               <div><label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Observações</label><textarea rows={2} placeholder="Ex: Prancha Longboard..." {...register('observacoes')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 resize-none" /></div>
 
-              <button type="submit" disabled={salvando} className="w-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-black py-5 rounded-xl text-lg mt-4 shadow-[0_4px_14px_rgba(232,67,106,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2">{salvando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={20} />}{salvando ? 'Adicionando...' : 'Adicionar Aula'}</button>
+              <button type="submit" disabled={salvando} className="w-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-black py-5 rounded-xl text-lg mt-4 shadow-[0_4px_14px_rgba(232,67,106,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2">
+                {salvando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={20} />}
+                {salvando ? 'Adicionando...' : 'Adicionar Aula'}
+              </button>
             </form>
           </div>
         </div>
