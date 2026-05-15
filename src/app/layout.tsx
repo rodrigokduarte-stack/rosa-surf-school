@@ -1,27 +1,29 @@
-import type { Metadata } from "next";
-import { Geist } from "next/font/google";
-import "./globals.css";
+import './globals.css'
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import { LanguageProvider } from '@/contexts/LanguageContext'
 
-const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "Rosa Surf School — Controle de Aulas",
-  description: "Sistema de registro e controle de aulas da Rosa Surf School",
-  manifest: "/site.webmanifest",
-  icons: {
-    icon: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
-  },
-};
+  title: 'Rosa Surf School | App',
+  description: 'Sistema de gestão para escolas de surf',
+}
 
-export const viewport = {
-  themeColor: "#db2777",
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
-    <html lang="pt-BR" className={`${geist.variable} h-full`}>
-      <body className="min-h-full bg-gray-50 antialiased">{children}</body>
+    <html lang="pt-BR">
+      <body className={inter.className}>
+        <LanguageProvider>
+          <main className="min-h-screen bg-slate-50">
+            {children}
+          </main>
+        </LanguageProvider>
+      </body>
     </html>
-  );
+  )
 }
