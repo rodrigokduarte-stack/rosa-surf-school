@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Waves, CheckCircle, AlertCircle } from 'lucide-react'
+import { Waves, CheckCircle, AlertCircle, FileText } from 'lucide-react'
 
 // Dicionário completo
 const dicionario = {
