@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Periodo, formatarValor, parseProfessores, getRange } from '@/lib/dateUtils'
+import { useLanguage } from '@/contexts/LanguageContext'
 import { 
   TrendingUp, TrendingDown, DollarSign, Clock, Users, BarChart2, 
   RefreshCw, GraduationCap, Package, Tag, Wallet, Activity, 
@@ -21,13 +22,6 @@ interface DadosFinanceiros {
   aulasARealizar: number
 }
 
-const PERIODOS: { id: Periodo; label: string }[] = [
-  { id: 'hoje', label: 'Hoje' },
-  { id: 'semana', label: 'Semana' },
-  { id: 'mes', label: 'Mês' },
-  { id: 'tudo', label: 'Tudo' },
-]
-
 const DADOS_VAZIOS: DadosFinanceiros = {
   faturamentoBruto: 0, aReceber: 0,
   custoProfessores: 0, custosOperacionais: 0, totalAulas: 0,
@@ -42,17 +36,25 @@ const ICONES_PAGAMENTO: Record<string, any> = {
 }
 
 export default function FinanceiroTab() {
+  const { t } = useLanguage() // Cérebro ativado no Financeiro!
   const [periodo, setPeriodo] = useState<Periodo>('tudo')
   const [dados, setDados] = useState<DadosFinanceiros>(DADOS_VAZIOS)
   const [breakdownCategorias, setBreakdownCategorias] = useState<Record<string, number>>({})
   const [breakdownPagamentos, setBreakdownPagamentos] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
 
+  // Recria os períodos de forma dinâmica baseada no idioma selecionado
+  const periodosList: { id: Periodo; label: string }[] = [
+    { id: 'hoje', label: t.financeiroTab.periodoHoje },
+    { id: 'semana', label: t.financeiroTab.periodoSemana },
+    { id: 'mes', label: t.financeiroTab.periodoMes },
+    { id: 'tudo', label: t.financeiroTab.periodoTudo },
+  ]
+
   async function fetchDados(p: Periodo) {
     setLoading(true)
     const { inicio, fim } = getRange(p)
 
-    // Busca apenas dados não arquivados (excluido = false)
     let aulasQ = supabase
       .from('registro_aulas')
       .select('valor_aula, valor_pago, status_pagamento, nome_professor, forma_pagamento')
@@ -65,7 +67,6 @@ export default function FinanceiroTab() {
     if (inicio) custosQ = custosQ.gte('data_despesa', inicio)
     if (fim) custosQ = custosQ.lte('data_despesa', fim)
 
-    // Para pacotes, a data de referência financeira é a de criação
     let pacotesQ = supabase.from('pacotes').select('valor_total, valor_pago, aulas_restantes, forma_pagamento, created_at').eq('excluido', false)
     if (inicio) pacotesQ = pacotesQ.gte('created_at', inicio + 'T00:00:00Z')
     if (fim) pacotesQ = pacotesQ.lte('created_at', fim + 'T23:59:59Z')
@@ -86,7 +87,7 @@ export default function FinanceiroTab() {
 
     setBreakdownCategorias(
       custosList.reduce((acc, c) => {
-        const cat = (c.categoria as string) || 'Outros'
+        const cat = (c.categoria as string) || t.financeiroTab.outros
         acc[cat] = (acc[cat] ?? 0) + Number(c.valor)
         return acc
       }, {} as Record<string, number>)
@@ -96,7 +97,7 @@ export default function FinanceiroTab() {
     
     aulasList.forEach(a => {
       if (a.status_pagamento === 'Pago' || a.status_pagamento === 'Parcial') {
-        const forma = a.forma_pagamento || 'Não informado'
+        const forma = a.forma_pagamento || t.financeiroTab.naoInformado
         const valorEfetivo = a.status_pagamento === 'Parcial' ? Number(a.valor_pago || 0) : Number(a.valor_aula || a.valor_pago || 0)
         
         if (valorEfetivo > 0) {
@@ -108,14 +109,13 @@ export default function FinanceiroTab() {
     pacotesList.forEach(p => {
       const valorPagoPacote = Number(p.valor_pago || 0)
       if (valorPagoPacote > 0) {
-        const forma = (p as any).forma_pagamento || 'Não informado'
+        const forma = (p as any).forma_pagamento || t.financeiroTab.naoInformado
         pagamentosMap[forma] = (pagamentosMap[forma] ?? 0) + valorPagoPacote
       }
     })
 
     setBreakdownPagamentos(pagamentosMap)
 
-    // MATEMÁTICA CORRIGIDA (Soma Aulas + Pacotes)
     const faturamentoAulas = aulasList.reduce((s, a) => {
       if (a.status_pagamento === 'Pago') return s + Number(a.valor_aula)
       if (a.status_pagamento === 'Parcial') return s + Number(a.valor_pago || 0)
@@ -151,16 +151,17 @@ export default function FinanceiroTab() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchDados(periodo) }, [periodo])
+  useEffect(() => { fetchDados(periodo) }, [periodo, t])
 
   const lucroLiquido = dados.faturamentoBruto - dados.custoProfessores - dados.custosOperacionais
-  const labelPeriodo = PERIODOS.find(p => p.id === periodo)?.label ?? ''
+  const labelPeriodo = periodosList.find(p => p.id === periodo)?.label ?? ''
   const margem = dados.faturamentoBruto > 0 ? Math.round((lucroLiquido / dados.faturamentoBruto) * 100) : 0
 
-  const tituloPagamento = periodo === 'hoje' ? '💸 Quem Pagar Hoje' :
-                          periodo === 'semana' ? '💸 Quem Pagar na Semana' :
-                          periodo === 'mes' ? '💸 Quem Pagar no Mês' :
-                          '💸 Histórico de Pagamentos'
+  const tituloPagamento = 
+    periodo === 'hoje' ? t.financeiroTab.quemPagarHoje :
+    periodo === 'semana' ? t.financeiroTab.quemPagarSemana :
+    periodo === 'mes' ? t.financeiroTab.quemPagarMes :
+    t.financeiroTab.historicoPagamentos
 
   return (
     <div className="px-4 py-2 flex flex-col gap-6" id="relatorio-financeiro">
@@ -169,7 +170,7 @@ export default function FinanceiroTab() {
         <div>
           <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2 drop-shadow-md">
             <BarChart2 size={22} className="text-pink-400" />
-            Dashboard
+            {t.financeiroTab.titulo}
           </h2>
         </div>
         
@@ -177,14 +178,14 @@ export default function FinanceiroTab() {
           <button
             onClick={() => window.print()}
             className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
-            title="Exportar PDF"
+            title={t.financeiroTab.exportar}
           >
             <Download size={18} />
           </button>
           <button
             onClick={() => fetchDados(periodo)}
             className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
-            title="Atualizar"
+            title={t.financeiroTab.atualizar}
           >
             <RefreshCw size={18} />
           </button>
@@ -193,11 +194,11 @@ export default function FinanceiroTab() {
 
       <div className="hidden print:block text-center mb-4 border-b pb-4">
         <h1 className="text-2xl font-black text-slate-800">Rosa Surf School</h1>
-        <p className="text-slate-500">Relatório Financeiro: {labelPeriodo}</p>
+        <p className="text-slate-500">{t.financeiroTab.relatorio} {labelPeriodo}</p>
       </div>
 
       <div className="bg-white/90 backdrop-blur-sm rounded-[16px] p-1.5 shadow-sm border border-slate-100 flex gap-1 print:hidden">
-        {PERIODOS.map(({ id, label }) => (
+        {periodosList.map(({ id, label }) => (
           <button
             key={id}
             onClick={() => setPeriodo(id)}
@@ -223,7 +224,7 @@ export default function FinanceiroTab() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Wallet size={16} className="text-slate-400 print:text-slate-500" />
-                  <span className="text-[11px] font-bold text-slate-400 print:text-slate-500 uppercase tracking-widest">Lucro Líquido ({labelPeriodo})</span>
+                  <span className="text-[11px] font-bold text-slate-400 print:text-slate-500 uppercase tracking-widest">{t.financeiroTab.lucroLiquido} ({labelPeriodo})</span>
                 </div>
               </div>
               <div className="flex items-end gap-3 mb-2">
@@ -234,9 +235,9 @@ export default function FinanceiroTab() {
               <div className="flex items-center gap-2 mt-4">
                 <div className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${lucroLiquido >= 0 ? 'bg-emerald-500/20 text-emerald-400 print:bg-emerald-100 print:text-emerald-700' : 'bg-rose-500/20 text-rose-400 print:bg-rose-100 print:text-rose-700'}`}>
                   <Activity size={12} />
-                  {margem}% Margem
+                  {margem}% {t.financeiroTab.margem}
                 </div>
-                <span className="text-xs font-medium text-slate-500">sobre o faturamento global</span>
+                <span className="text-xs font-medium text-slate-500">{t.financeiroTab.sobreFaturamento}</span>
               </div>
             </div>
           </div>
@@ -246,42 +247,42 @@ export default function FinanceiroTab() {
               <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center mb-3">
                 <ArrowUpRight size={16} className="text-emerald-600" />
               </div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Faturado</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">{t.financeiroTab.faturado}</span>
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.faturamentoBruto)}</span>
             </div>
             <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] print:shadow-none print:border-slate-200">
               <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center mb-3">
                 <Clock size={16} className="text-amber-600" />
               </div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">A Receber</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">{t.financeiroTab.aReceber}</span>
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.aReceber)}</span>
             </div>
             <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] print:shadow-none print:border-slate-200">
               <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                 <Users size={16} className="text-slate-600" />
               </div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Professores</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">{t.financeiroTab.professores}</span>
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.custoProfessores)}</span>
             </div>
             <div className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] print:shadow-none print:border-slate-200">
               <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center mb-3">
                 <ArrowDownRight size={16} className="text-rose-600" />
               </div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Custos (Fixos)</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">{t.financeiroTab.custosFixos}</span>
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.custosOperacionais)}</span>
             </div>
           </div>
 
           {dados.totalAulas > 0 && (
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest text-center mt-2">
-              Baseado em {dados.totalAulas} aula{dados.totalAulas !== 1 ? 's' : ''} concluídas
+              {t.financeiroTab.baseadoEm} {dados.totalAulas} {dados.totalAulas !== 1 ? t.financeiroTab.aulasConcluidas : t.financeiroTab.aulaConcluida}
             </p>
           )}
 
           {Object.keys(breakdownPagamentos).length > 0 && (
             <div className="mt-2">
               <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 print:hidden" /> Como o dinheiro entrou?
+                <span className="w-2 h-2 rounded-full bg-emerald-500 print:hidden" /> {t.financeiroTab.comoEntrou}
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 {Object.entries(breakdownPagamentos)
@@ -307,7 +308,7 @@ export default function FinanceiroTab() {
           {Object.keys(breakdownCategorias).length > 0 && (
             <div className="mt-2">
               <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full bg-rose-500 print:hidden" /> Onde o dinheiro foi?
+                <span className="w-2 h-2 rounded-full bg-rose-500 print:hidden" /> {t.financeiroTab.ondeFoi}
               </h3>
               <div className="bg-white rounded-[20px] shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-100 p-4 flex flex-col gap-4 print:shadow-none print:border-slate-200">
                 {Object.entries(breakdownCategorias)
@@ -340,7 +341,7 @@ export default function FinanceiroTab() {
                 {tituloPagamento}
               </h3>
               <span className="text-[9px] font-bold text-pink-400 uppercase tracking-widest bg-pink-400/10 px-2 py-0.5 rounded-full border border-pink-400/20 print:hidden">
-                Equipe
+                {t.financeiroTab.equipe}
               </span>
             </div>
             <div className="bg-white rounded-[20px] p-2 print:p-0 border border-slate-100/50">
