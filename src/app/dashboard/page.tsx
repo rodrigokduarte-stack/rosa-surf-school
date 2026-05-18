@@ -17,7 +17,6 @@ import TermosTab from './components/TermosTab'
 import ProfessoresTab from './components/ProfessoresTab'
 import AlunosTab from './components/AlunosTab'
 import PerfilTab from './components/PerfilTab' 
-import { LanguageToggle } from './components/LanguageToggle'
 
 type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos' | 'professores' | 'alunos' | 'perfil'
 
@@ -103,9 +102,6 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* BOTÃO DE IDIOMA ADICIONADO AQUI */}
-          <LanguageToggle />
-
           <button onClick={() => setIsNotificacoesOpen(true)} className="relative w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-lg transition-transform active:scale-95">
             <Bell size={18} />
             {notificacoes.length > 0 && <span className="absolute top-0 right-0 w-3.5 h-3.5 bg-rose-500 border-2 border-[#0a1628] rounded-full animate-pulse" />}
@@ -132,7 +128,7 @@ export default function DashboardPage() {
               {notificacoes.length > 0 ? (
                 notificacoes.map((notif, idx) => (
                   <div key={idx} onClick={() => changeTab(notif.acao)} className="p-3 hover:bg-slate-50 cursor-pointer rounded-xl transition-colors border-b border-slate-50 last:border-0 flex flex-col gap-1">
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${notif.tipo === 'urgente' ? 'text-rose-500' : 'text-amber-500'}`}>
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${notif.tipo === 'urgente' ? 'text-rose-500' : 'text-amber-500'}`}>
                       {notif.tipo}
                     </span>
                     <strong className="text-sm text-slate-800">{notif.titulo}</strong>
