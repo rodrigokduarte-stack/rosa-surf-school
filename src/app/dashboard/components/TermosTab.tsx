@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { TermoAssinado } from '@/types'
 import { FileText, MessageCircle, X, CheckCircle } from 'lucide-react'
 import { useLanguage } from '@/contexts/LanguageContext'
+import { pt } from '@/dictionaries/pt' // <-- Importamos o PT direto para travar a mensagem
 
 function formatarDataHora(ts: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -15,7 +16,7 @@ function formatarDataHora(ts: string): string {
 }
 
 export default function TermosTab() {
-  const { t } = useLanguage() // Cérebro ativado!
+  const { t } = useLanguage()
   const [termos, setTermos] = useState<TermoAssinado[]>([])
   const [loading, setLoading] = useState(true)
   const [mostrarWpp, setMostrarWpp] = useState(false)
@@ -36,18 +37,18 @@ export default function TermosTab() {
   useEffect(() => { carregarTermos() }, [carregarTermos])
 
   function gerarLinkWhatsApp() {
-    let digits = numero.replace(/[^\d+]/g, '') // Mantém números e o sinal de +
+    let digits = numero.replace(/[^\d+]/g, '') 
     if (digits.replace(/\D/g, '').length < 7) return
     
-    // Inteligência do DDI: Se não tiver o +, assume que é Brasil e adiciona 55
     if (!digits.startsWith('+')) {
       digits = '55' + digits
     } else {
-      digits = digits.replace('+', '') // Remove o + para a URL do WhatsApp
+      digits = digits.replace('+', '') 
     }
 
     const url = typeof window !== 'undefined' ? window.location.origin : ''
-    const texto = encodeURIComponent(`${t.termosTab.textoWpp}: ${url}/termo`)
+    // TRAVADO EM PORTUGUÊS
+    const texto = encodeURIComponent(`${pt.termosTab.textoWpp}: ${url}/termo`)
     window.open(`https://wa.me/${digits}?text=${texto}`, '_blank')
     setMostrarWpp(false)
     setNumero('')
