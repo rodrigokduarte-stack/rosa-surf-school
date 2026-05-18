@@ -25,21 +25,6 @@ const OPCOES_HORARIOS = Array.from({ length: 27 }, (_, i) => {
 type FormData = Omit<NovaAula, 'nome_professor' | 'pacote_id'> & { valor_pago?: number }
 type AulaComPagamento = RegistroAula & { valor_pago?: number, pacote_id?: string | null }
 
-function formatarDataHeader(dataStr: string) {
-  const [ano, mes, dia] = dataStr.split('-')
-  const dataAula = new Date(Number(ano), Number(mes) - 1, Number(dia))
-  const amanha = new Date()
-  amanha.setDate(amanha.getDate() + 1)
-  
-  let nomeDia = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][dataAula.getDay()]
-  
-  if (dataAula.getDate() === amanha.getDate() && dataAula.getMonth() === amanha.getMonth()) {
-    nomeDia = 'Amanhã'
-  }
-
-  return `${nomeDia}, ${dia}/${mes}`
-}
-
 function formatarDataISO(d: Date) {
   const a = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -48,7 +33,41 @@ function formatarDataISO(d: Date) {
 }
 
 export default function AulasTab() {
-  const { t } = useLanguage() 
+  const { t, language } = useLanguage() 
+
+  // Dicionários dinâmicos de data para respeitar o Cérebro Tradutor
+  const diasDaSemana = {
+    pt: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'],
+    en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    es: ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+  }
+
+  const diasCurtos = {
+    pt: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
+    en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    es: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+  }
+
+  const amanhaTextos = {
+    pt: 'Amanhã',
+    en: 'Tomorrow',
+    es: 'Mañana'
+  }
+
+  function formatarDataHeader(dataStr: string) {
+    const [ano, mes, dia] = dataStr.split('-')
+    const dataAula = new Date(Number(ano), Number(mes) - 1, Number(dia))
+    const amanha = new Date()
+    amanha.setDate(amanha.getDate() + 1)
+    
+    let nomeDia = diasDaSemana[language][dataAula.getDay()]
+    
+    if (dataAula.getDate() === amanha.getDate() && dataAula.getMonth() === amanha.getMonth()) {
+      nomeDia = amanhaTextos[language]
+    }
+  
+    return `${nomeDia}, ${dia}/${mes}`
+  }
 
   const [abaVisivel, setAbaVisivel] = useState<'hoje' | 'programadas' | 'calendario'>('hoje')
   const [aulasHoje, setAulasHoje] = useState<AulaComPagamento[]>([])
@@ -239,7 +258,7 @@ export default function AulasTab() {
     const d = new Date(dataBase); d.setDate(d.getDate() + i); return d;
   })
   
-  const nomesDias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+  const nomesDias = diasCurtos[language]
   const todasAulas = [...aulasHoje, ...aulasProgramadas]
   const dataStrSemana = diasGrid.map(d => formatarDataISO(d))
   const aulasNaSemana = todasAulas.filter(a => dataStrSemana.includes(a.data_aula))
