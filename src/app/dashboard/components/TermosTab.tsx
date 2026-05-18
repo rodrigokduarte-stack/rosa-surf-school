@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { TermoAssinado } from '@/types'
 import { FileText, MessageCircle, X, CheckCircle } from 'lucide-react'
+import { useLanguage } from '@/contexts/LanguageContext'
 
 function formatarDataHora(ts: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -14,6 +15,7 @@ function formatarDataHora(ts: string): string {
 }
 
 export default function TermosTab() {
+  const { t } = useLanguage() // Cérebro ativado!
   const [termos, setTermos] = useState<TermoAssinado[]>([])
   const [loading, setLoading] = useState(true)
   const [mostrarWpp, setMostrarWpp] = useState(false)
@@ -34,10 +36,18 @@ export default function TermosTab() {
   useEffect(() => { carregarTermos() }, [carregarTermos])
 
   function gerarLinkWhatsApp() {
-    const digits = numero.replace(/\D/g, '')
-    if (digits.length < 7) return
+    let digits = numero.replace(/[^\d+]/g, '') // Mantém números e o sinal de +
+    if (digits.replace(/\D/g, '').length < 7) return
+    
+    // Inteligência do DDI: Se não tiver o +, assume que é Brasil e adiciona 55
+    if (!digits.startsWith('+')) {
+      digits = '55' + digits
+    } else {
+      digits = digits.replace('+', '') // Remove o + para a URL do WhatsApp
+    }
+
     const url = typeof window !== 'undefined' ? window.location.origin : ''
-    const texto = encodeURIComponent(`Por favor, assine o termo de responsabilidade: ${url}/termo`)
+    const texto = encodeURIComponent(`${t.termosTab.textoWpp}: ${url}/termo`)
     window.open(`https://wa.me/${digits}?text=${texto}`, '_blank')
     setMostrarWpp(false)
     setNumero('')
@@ -58,13 +68,13 @@ export default function TermosTab() {
           className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#1ebe5c] text-white font-semibold py-4 rounded-2xl shadow-sm"
         >
           <MessageCircle size={20} />
-          Enviar Termo via WhatsApp
+          {t.termosTab.enviarWpp}
         </button>
 
         {mostrarWpp && (
           <div className="bg-white rounded-2xl shadow-sm p-4 border border-slate-100">
             <div className="flex items-center justify-between mb-3">
-              <p className="font-semibold text-slate-700 text-sm">WhatsApp Aluno</p>
+              <p className="font-semibold text-slate-700 text-sm">{t.termosTab.wppAluno}</p>
               <button onClick={() => setMostrarWpp(false)} className="text-slate-400">
                 <X size={16} />
               </button>
@@ -72,8 +82,8 @@ export default function TermosTab() {
             <input
               type="tel"
               value={numero}
-              onChange={e => setNumero(e.target.value.replace(/[^\d\s\-()+ ]/g, ''))}
-              placeholder="+55 48 99999-9999"
+              onChange={e => setNumero(e.target.value)}
+              placeholder="Ex: 48 9999-9999 ou +54 9..."
               className="w-full border border-slate-300 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-green-500"
             />
             <button
@@ -81,7 +91,7 @@ export default function TermosTab() {
               disabled={numero.replace(/\D/g, '').length < 7}
               className="mt-3 w-full bg-[#25D366] text-white font-semibold py-3 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              <MessageCircle size={16} /> Abrir WhatsApp
+              <MessageCircle size={16} /> {t.termosTab.abrirWpp}
             </button>
           </div>
         )}
@@ -90,24 +100,24 @@ export default function TermosTab() {
           onClick={copiarLink}
           className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-600 font-medium py-3 rounded-2xl text-sm"
         >
-          {linkCopiado ? 'Link copiado!' : 'Copiar link do termo'}
+          {linkCopiado ? t.termosTab.linkCopiado : t.termosTab.copiarLink}
         </button>
       </div>
 
       <div className="flex flex-col gap-2">
-        <h2 className="text-base font-semibold text-slate-700 px-1">Recentemente Assinados</h2>
+        <h2 className="text-base font-semibold text-slate-700 px-1">{t.termosTab.recentes}</h2>
         {loading ? (
           <div className="animate-spin w-6 h-6 border-4 border-pink-500 border-t-transparent rounded-full mx-auto" />
         ) : (
           termos.map(termo => (
-            <div key={termo.id} className="bg-white rounded-2xl shadow-sm p-4 flex justify-between">
+            <div key={termo.id} className="bg-white rounded-2xl shadow-sm p-4 flex justify-between border border-slate-50">
               <div>
                 <p className="font-semibold text-slate-800">{termo.nome_aluno}</p>
-                <p className="text-xs text-slate-500">{termo.cpf}</p>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">{termo.cpf}</p>
               </div>
-              <div className="text-right text-xs text-slate-400">
-                <p className="text-emerald-600 font-bold">Assinado</p>
-                <p>{termo.created_at ? formatarDataHora(termo.created_at) : ''}</p>
+              <div className="text-right text-xs text-slate-400 flex flex-col justify-center">
+                <p className="text-emerald-600 font-bold flex items-center justify-end gap-1"><CheckCircle size={10} /> {t.termosTab.assinado}</p>
+                <p className="mt-0.5">{termo.created_at ? formatarDataHora(termo.created_at) : ''}</p>
               </div>
             </div>
           ))
