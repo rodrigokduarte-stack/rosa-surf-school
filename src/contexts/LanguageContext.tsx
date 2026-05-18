@@ -3,8 +3,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { pt } from '@/dictionaries/pt'
 import { en } from '@/dictionaries/en'
+import { es } from '@/dictionaries/es'
 
-type Language = 'pt' | 'en'
+type Language = 'pt' | 'en' | 'es'
 type Dictionary = typeof pt
 
 interface LanguageContextType {
@@ -20,20 +21,26 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const savedLang = localStorage.getItem('app_language') as Language
-    if (savedLang === 'en' || savedLang === 'pt') {
+    if (savedLang === 'en' || savedLang === 'pt' || savedLang === 'es') {
       setLanguage(savedLang)
     }
   }, [])
 
   const toggleLanguage = () => {
     setLanguage((prev) => {
-      const newLang = prev === 'pt' ? 'en' : 'pt'
+      // Cria o ciclo: Português -> Inglês -> Espanhol -> volta pro Português
+      let newLang: Language = 'pt'
+      if (prev === 'pt') newLang = 'en'
+      else if (prev === 'en') newLang = 'es'
+      else if (prev === 'es') newLang = 'pt'
+      
       localStorage.setItem('app_language', newLang)
       return newLang
     })
   }
 
-  const t = language === 'pt' ? pt : en
+  // Define qual dicionário usar baseado no estado atual
+  const t = language === 'pt' ? pt : language === 'en' ? en : es
 
   return (
     <LanguageContext.Provider value={{ language, t, toggleLanguage }}>
