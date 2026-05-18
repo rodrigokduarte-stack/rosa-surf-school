@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '@/contexts/LanguageContext'
 import { Users, UserPlus, Trash2, DollarSign, CheckCircle } from 'lucide-react'
 
 interface Professor {
@@ -12,6 +13,7 @@ interface Professor {
 }
 
 export default function ProfessoresTab() {
+  const { t } = useLanguage() // Tradutor ligado!
   const [professores, setProfessores] = useState<Professor[]>([])
   const [loading, setLoading] = useState(true)
   
@@ -26,7 +28,7 @@ export default function ProfessoresTab() {
     const { data } = await supabase
       .from('professores')
       .select('*')
-      .eq('ativo', true) // <-- LÓGICA NOVA: Puxa só quem está ativo!
+      .eq('ativo', true)
       .order('nome', { ascending: true })
     
     setProfessores(data ?? [])
@@ -51,19 +53,18 @@ export default function ProfessoresTab() {
       setNovoValor(100) 
       carregarProfessores()
     } else {
-      alert('Erro ao adicionar professor. O nome já existe ou a coluna "ativo" não foi criada no Supabase.')
+      alert(t.professoresTab.erroAdd)
     }
     setSalvando(false)
   }
 
-  // LÓGICA NOVA: ARQUIVAR EM VEZ DE DELETAR
   async function excluirProfessor(id: string, nome: string) {
-    if (!window.confirm(`Tem certeza que deseja remover ${nome} da equipe ativa? O histórico dele será mantido nas finanças.`)) return
+    if (!window.confirm(t.professoresTab.confirmaArquivar)) return
 
     setExcluindo(id)
     const { error } = await supabase
       .from('professores')
-      .update({ ativo: false }) // <-- Apenas inativa o professor
+      .update({ ativo: false }) 
       .eq('id', id)
 
     if (!error) {
@@ -77,7 +78,7 @@ export default function ProfessoresTab() {
       
       <div className="flex items-center gap-2 -mt-2">
         <Users size={22} className="text-pink-400 drop-shadow-md" />
-        <h2 className="text-xl font-black text-white tracking-tight drop-shadow-md">Equipe de Professores</h2>
+        <h2 className="text-xl font-black text-white tracking-tight drop-shadow-md">{t.professoresTab.equipe}</h2>
       </div>
 
       <form onSubmit={adicionarProfessor} className="bg-white rounded-[24px] shadow-sm p-5 border border-slate-100 flex flex-col gap-4">
@@ -86,19 +87,19 @@ export default function ProfessoresTab() {
             <UserPlus size={16} className="text-pink-600" />
           </div>
           <div>
-            <h3 className="text-[15px] font-bold text-slate-800 leading-tight">Novo Professor</h3>
-            <p className="text-[11px] text-slate-500 font-medium">Cadastre e defina a taxa da aula</p>
+            <h3 className="text-[15px] font-bold text-slate-800 leading-tight">{t.professoresTab.novoProfessor}</h3>
+            <p className="text-[11px] text-slate-500 font-medium">{t.professoresTab.cadastreDefina}</p>
           </div>
         </div>
 
         <div className="flex flex-col gap-3">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block ml-1">Nome Completo</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block ml-1">{t.professoresTab.nomeCompleto}</label>
             <input
               type="text"
               value={novoNome}
               onChange={e => setNovoNome(e.target.value)}
-              placeholder="Ex: Gabriel Medina"
+              placeholder={t.professoresTab.exNome}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
             />
           </div>
@@ -106,7 +107,7 @@ export default function ProfessoresTab() {
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1 ml-1">
-                <DollarSign size={12} /> Valor por Aula
+                <DollarSign size={12} /> {t.professoresTab.valorAula}
               </label>
               <input
                 type="number"
@@ -114,7 +115,7 @@ export default function ProfessoresTab() {
                 step="0.01"
                 value={novoValor}
                 onChange={e => setNovoValor(e.target.value)}
-                placeholder="Ex: 100"
+                placeholder={t.professoresTab.exValor}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
               />
             </div>
@@ -128,7 +129,7 @@ export default function ProfessoresTab() {
                 {salvando ? (
                   <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                  'Salvar'
+                  t.professoresTab.salvar
                 )}
               </button>
             </div>
@@ -138,7 +139,7 @@ export default function ProfessoresTab() {
 
       <div>
         <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-3">
-          <span className="w-2 h-2 rounded-full bg-pink-500" /> Elenco Atual
+          <span className="w-2 h-2 rounded-full bg-pink-500" /> {t.professoresTab.elencoAtual}
         </h3>
         
         {loading ? (
@@ -148,8 +149,8 @@ export default function ProfessoresTab() {
         ) : professores.length === 0 ? (
           <div className="bg-white rounded-[24px] p-8 shadow-sm text-center border border-slate-100">
             <span className="text-4xl mb-3 block">🏄‍♂️</span>
-            <p className="text-slate-500 font-medium text-sm">Escola vazia.</p>
-            <p className="text-slate-400 text-xs mt-1">Nenhum professor ativo no momento.</p>
+            <p className="text-slate-500 font-medium text-sm">{t.professoresTab.escolaVazia}</p>
+            <p className="text-slate-400 text-xs mt-1">{t.professoresTab.nenhumProfAtivo}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -164,7 +165,7 @@ export default function ProfessoresTab() {
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="text-[10px] font-bold uppercase tracking-widest bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md flex items-center gap-0.5">
                         <DollarSign size={10} strokeWidth={3} />
-                        {prof.valor_aula ? prof.valor_aula.toFixed(2).replace('.', ',') : '100,00'}/aula
+                        {prof.valor_aula ? prof.valor_aula.toFixed(2).replace('.', ',') : '100,00'}/{t.professoresTab.aula}
                       </span>
                     </div>
                   </div>
