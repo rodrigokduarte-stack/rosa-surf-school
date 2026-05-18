@@ -7,8 +7,8 @@ import {
   Fingerprint, Plus, Share2, X, CheckCircle, Edit2,
   ChevronDown, ChevronUp, FileText, Waves, Save
 } from 'lucide-react'
+import { useLanguage } from '@/contexts/LanguageContext'
 
-// Tipagem base
 type Aluno = {
   id: string
   nome: string
@@ -19,18 +19,17 @@ type Aluno = {
   nivel_surf?: string
   prancha_surf?: string
   cpf?: string
-  assinatura_data?: string // Novo campo para o termo
+  assinatura_data?: string 
 }
 
 export default function AlunosTab() {
+  const { t } = useLanguage()
   const [alunos, setAlunos] = useState<Aluno[]>([])
   const [busca, setBusca] = useState('')
   const [loading, setLoading] = useState(true)
   
-  // Controle da Sanfona
   const [alunoExpandido, setAlunoExpandido] = useState<string | null>(null)
 
-  // Estados para o Modal de Cadastro/Edição
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [alunoEditando, setAlunoEditando] = useState<string | null>(null)
@@ -40,13 +39,11 @@ export default function AlunosTab() {
   const [novoTelefone, setNovoTelefone] = useState('')
   const [novoInstagram, setNovoInstagram] = useState('')
 
-  // Estado para feedback visual de salvamento do prontuário
   const [salvandoProntuarioId, setSalvandoProntuarioId] = useState<string | null>(null)
 
   async function carregarAlunos() {
     setLoading(true)
     
-    // Busca alunos ordenados alfabeticamente
     const { data: alunosData, error: alunosError } = await supabase
       .from('alunos')
       .select('*')
@@ -62,7 +59,8 @@ export default function AlunosTab() {
         const termo = termosData?.find(t => t.nome_aluno === aluno.nome)
         return { 
           ...aluno, 
-          cpf: termo?.cpf || 'Não assinado',
+          // Se não tiver termo, joga uma string vazia para controle universal de idioma
+          cpf: termo?.cpf || '',
           assinatura_data: termo?.created_at || ''
         }
       })
@@ -110,7 +108,6 @@ export default function AlunosTab() {
       const response = await supabase.from('alunos').update(payload).eq('id', alunoEditando)
       error = response.error
 
-      // Atualiza o nome em outras tabelas para manter integridade
       if (!error && nomeFormatado !== nomeOriginal) {
         await supabase.from('registro_aulas').update({ nome_cliente: nomeFormatado }).eq('nome_cliente', nomeOriginal)
         await supabase.from('pacotes').update({ nome_cliente: nomeFormatado }).eq('nome_cliente', nomeOriginal)
@@ -123,7 +120,7 @@ export default function AlunosTab() {
     }
 
     if (error) {
-      alert("Erro ao salvar: " + error.message)
+      alert(t.alunosTab.erroSalvar + error.message)
     } else {
       setIsModalOpen(false)
       carregarAlunos() 
@@ -131,30 +128,27 @@ export default function AlunosTab() {
     setSalvando(false)
   }
 
-  // Função para salvar dados do prontuário técnico (onBlur = quando tira o foco do campo)
   async function atualizarProntuario(alunoId: string, campo: string, valor: string) {
     setSalvandoProntuarioId(alunoId)
     const { error } = await supabase.from('alunos').update({ [campo]: valor }).eq('id', alunoId)
-    if (error) alert("Erro ao salvar prontuário.")
+    if (error) alert(t.alunosTab.erroProntuario)
     
-    // Atualiza o estado local para não precisar recarregar todos os alunos
     setAlunos(prev => prev.map(a => a.id === alunoId ? { ...a, [campo]: valor } : a))
     
-    setTimeout(() => setSalvandoProntuarioId(null), 500) // Feedback visual rápido
+    setTimeout(() => setSalvandoProntuarioId(null), 500) 
   }
 
   function compartilharLink() {
     const dominio = window.location.origin
     const link = `${dominio}/cadastro` 
-    const mensagem = encodeURIComponent(`Olá! Para agilizar sua aula na Rosa Surf School, preencha sua ficha e assine o termo de responsabilidade por este link: ${link}`)
+    const mensagem = encodeURIComponent(`${t.alunosTab.msgWpp}${link}`)
     window.open(`https://wa.me/?text=${mensagem}`, '_blank')
   }
 
-  // Geração da página de impressão do Termo
   function imprimirTermo(aluno: Aluno) {
-    if (!aluno.cpf || aluno.cpf === 'Não assinado') return
+    if (!aluno.cpf) return
 
-    const dataAceite = new Date(aluno.assinatura_data || '').toLocaleString('pt-BR')
+    const dataAceite = new Date(aluno.assinatura_data || '').toLocaleString()
     const dominio = window.location.origin
 
     const janelaPrint = window.open('', '_blank')
@@ -178,34 +172,33 @@ export default function AlunosTab() {
         </head>
         <body>
           <div class="header">
-            <h1 class="title">Termo de Aceite de Risco e Responsabilidade</h1>
-            <p class="subtitle">Rosa Surf School - Documento Digital</p>
+            <h1 class="title">${t.alunosTab.pdfTitulo}</h1>
+            <p class="subtitle">${t.alunosTab.pdfSub}</p>
           </div>
           
           <div class="dados">
-            <p><strong>Nome do Aluno:</strong> ${aluno.nome}</p>
-            <p><strong>CPF:</strong> ${aluno.cpf}</p>
-            <p><strong>Data de Aceite Digital:</strong> ${dataAceite}</p>
-            <p><strong>Validação:</strong> Assinatura eletrônica vinculada ao cadastro no sistema (${dominio}).</p>
+            <p><strong>${t.alunosTab.pdfNome}:</strong> ${aluno.nome}</p>
+            <p><strong>CPF / Document:</strong> ${aluno.cpf}</p>
+            <p><strong>${t.alunosTab.pdfData}:</strong> ${dataAceite}</p>
+            <p><strong>${t.alunosTab.pdfValidacao}:</strong> ${t.alunosTab.pdfValidacaoTexto} (${dominio}).</p>
           </div>
 
           <div class="content">
-            <p>Reconheço e concordo que a prática do surf envolve riscos iminentes, incluindo, mas não se limitando a, lesões físicas, afogamento e danos a equipamentos. Assumo total responsabilidade por quaisquer acidentes ou lesões que possam ocorrer durante as aulas.</p>
-            <p>Confirmo que não possuo restrições médicas que me impeçam de praticar atividades físicas intensas.</p>
-            <p>Isento a escola de surf, seus instrutores e funcionários de qualquer responsabilidade civil ou criminal em caso de acidentes.</p>
-            <p>Este documento foi lido, compreendido e aceito digitalmente pelo aluno identificado acima, possuindo validade legal conforme a legislação brasileira vigente sobre contratos e aceites eletrônicos.</p>
+            <p>${t.alunosTab.pdfP1}</p>
+            <p>${t.alunosTab.pdfP2}</p>
+            <p>${t.alunosTab.pdfP3}</p>
+            <p>${t.alunosTab.pdfP4}</p>
           </div>
 
           <div class="footer">
-            Documento gerado automaticamente pelo sistema de gestão Rosa Surf School.<br/>
-            Impresso em: ${new Date().toLocaleString('pt-BR')}
+            ${t.alunosTab.pdfRodape}<br/>
+            ${t.alunosTab.pdfImpresso} ${new Date().toLocaleString()}
           </div>
         </body>
       </html>
     `)
     janelaPrint.document.close()
     
-    // Aguarda carregar e chama a impressão
     setTimeout(() => {
       janelaPrint.print()
     }, 500)
@@ -223,16 +216,16 @@ export default function AlunosTab() {
         <div className="flex flex-col">
           <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2 drop-shadow-md">
             <Users size={22} className="text-pink-400" />
-            CRM Alunos
+            {t.alunosTab.titulo}
           </h2>
-          <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">{alunos.length} cadastrados</span>
+          <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">{alunos.length} {t.alunosTab.cadastrados}</span>
         </div>
         
         <button 
           onClick={compartilharLink}
           className="bg-white text-slate-800 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95"
         >
-          <Share2 size={14} className="text-pink-500" /> Cadastro
+          <Share2 size={14} className="text-pink-500" /> {t.alunosTab.cadastro}
         </button>
       </div>
 
@@ -240,7 +233,7 @@ export default function AlunosTab() {
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
         <input
           type="text"
-          placeholder="Buscar aluno por nome..."
+          placeholder={t.alunosTab.buscar}
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           className="w-full bg-white rounded-[16px] pl-12 pr-4 py-4 shadow-sm border border-slate-100 focus:outline-none focus:ring-2 focus:ring-pink-500 transition-all text-sm font-bold text-slate-700"
@@ -254,16 +247,15 @@ export default function AlunosTab() {
           </div>
         ) : alunosFiltrados.length === 0 ? (
           <div className="bg-white rounded-[24px] p-8 text-center border border-slate-100 text-slate-400 text-sm font-medium shadow-sm">
-            Nenhum aluno encontrado.
+            {t.alunosTab.nenhumEncontrado}
           </div>
         ) : alunosFiltrados.map((aluno) => {
           const isExpandido = alunoExpandido === aluno.id
-          const hasTermo = aluno.cpf !== 'Não assinado'
+          const hasTermo = !!aluno.cpf // Lógica universal de checagem
 
           return (
             <div key={aluno.id} className="bg-white rounded-[20px] shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-100 overflow-hidden transition-all duration-300">
               
-              {/* CABEÇALHO (Sempre visível) */}
               <button 
                 onClick={() => setAlunoExpandido(isExpandido ? null : aluno.id)}
                 className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors text-left"
@@ -277,7 +269,7 @@ export default function AlunosTab() {
                     <div className="flex items-center gap-2 mt-0.5">
                       {hasTermo && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
                       <span className={`text-[9px] font-black uppercase tracking-widest ${hasTermo ? 'text-emerald-600' : 'text-slate-400'}`}>
-                        {hasTermo ? 'Termo OK' : 'Sem termo'}
+                        {hasTermo ? t.alunosTab.termoOk : t.alunosTab.semTermo}
                       </span>
                     </div>
                   </div>
@@ -287,11 +279,9 @@ export default function AlunosTab() {
                 </div>
               </button>
 
-              {/* CONTEÚDO EXPANDIDO */}
               {isExpandido && (
                 <div className="p-4 pt-0 border-t border-slate-50 flex flex-col gap-4 animate-in slide-in-from-top-2 duration-300">
                   
-                  {/* Contatos Rápido */}
                   <div className="flex gap-2 mt-4">
                      <a href={`https://wa.me/${aluno.telefone?.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="flex-1 bg-[#25D366]/10 text-[#075E54] py-2 rounded-xl flex items-center justify-center gap-2 font-bold text-xs border border-[#25D366]/20">
                         <Phone size={12} /> WhatsApp
@@ -306,51 +296,50 @@ export default function AlunosTab() {
                      </button>
                   </div>
 
-                  {/* Prontuário Técnico */}
                   <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 relative">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                        <Waves size={12} className="text-pink-500"/> Prontuário Técnico
+                        <Waves size={12} className="text-pink-500"/> {t.alunosTab.prontuario}
                       </h4>
                       {salvandoProntuarioId === aluno.id && (
                         <span className="text-[9px] font-bold text-emerald-500 flex items-center gap-1 animate-pulse">
-                          <Save size={10} /> Salvo
+                          <Save size={10} /> {t.alunosTab.salvo}
                         </span>
                       )}
                     </div>
                     
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Base</label>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">{t.alunosTab.base}</label>
                         <select 
                           value={aluno.base_surf || ''} 
                           onChange={e => atualizarProntuario(aluno.id, 'base_surf', e.target.value)}
                           className="w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs font-bold text-slate-700 outline-none focus:border-pink-500"
                         >
-                          <option value="">Não def.</option>
+                          <option value="">{t.alunosTab.naoDef}</option>
                           <option value="Goofy">Goofy</option>
                           <option value="Regular">Regular</option>
                         </select>
                       </div>
                       <div>
-                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Nível</label>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">{t.alunosTab.nivel}</label>
                         <select 
                           value={aluno.nivel_surf || ''} 
                           onChange={e => atualizarProntuario(aluno.id, 'nivel_surf', e.target.value)}
                           className="w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs font-bold text-slate-700 outline-none focus:border-pink-500"
                         >
-                          <option value="">Não def.</option>
-                          <option value="Espuma (Inic.)">Espuma (Inic.)</option>
-                          <option value="Dropando">Dropando</option>
-                          <option value="Parede (Int.)">Parede (Int.)</option>
-                          <option value="Manobras (Av.)">Manobras (Av.)</option>
+                          <option value="">{t.alunosTab.naoDef}</option>
+                          <option value="Espuma (Inic.)">{t.alunosTab.espuma}</option>
+                          <option value="Dropando">{t.alunosTab.dropando}</option>
+                          <option value="Parede (Int.)">{t.alunosTab.parede}</option>
+                          <option value="Manobras (Av.)">{t.alunosTab.manobras}</option>
                         </select>
                       </div>
                       <div className="col-span-2">
-                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Prancha Ideal / Histórico</label>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">{t.alunosTab.prancha}</label>
                         <input 
                           type="text" 
-                          placeholder="Ex: Longboard 9'0, Softboard azul..."
+                          placeholder={t.alunosTab.exPrancha}
                           value={aluno.prancha_surf || ''}
                           onChange={e => setAlunos(prev => prev.map(a => a.id === aluno.id ? { ...a, prancha_surf: e.target.value } : a))}
                           onBlur={e => atualizarProntuario(aluno.id, 'prancha_surf', e.target.value)}
@@ -360,16 +349,15 @@ export default function AlunosTab() {
                     </div>
                   </div>
 
-                  {/* Download Termo */}
                   <div className={`rounded-xl p-3 border flex items-center justify-between ${hasTermo ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
                     <div className="flex items-center gap-2">
                       <Fingerprint size={16} className={hasTermo ? 'text-emerald-600' : 'text-rose-500'} />
                       <div className="flex flex-col">
                         <span className={`text-[10px] font-black uppercase tracking-wider ${hasTermo ? 'text-emerald-700' : 'text-rose-700'}`}>
-                          {hasTermo ? 'Termo Assinado' : 'Pendente'}
+                          {hasTermo ? t.alunosTab.termoAssinado : t.alunosTab.pendente}
                         </span>
                         <span className={`text-[9px] font-medium ${hasTermo ? 'text-emerald-600/80' : 'text-rose-600/80'}`}>
-                          {hasTermo ? `CPF: ${aluno.cpf}` : 'O aluno precisa assinar'}
+                          {hasTermo ? `CPF/ID: ${aluno.cpf}` : t.alunosTab.precisaAssinar}
                         </span>
                       </div>
                     </div>
@@ -377,7 +365,7 @@ export default function AlunosTab() {
                       <button 
                         onClick={() => imprimirTermo(aluno)}
                         className="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700 active:scale-90 transition-all shadow-sm"
-                        title="Imprimir/Salvar PDF"
+                        title={t.alunosTab.imprimir}
                       >
                         <FileText size={14} />
                       </button>
@@ -398,29 +386,28 @@ export default function AlunosTab() {
         <Plus size={32} strokeWidth={3} />
       </button>
 
-      {/* Modal Novo/Editar */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
           <form onSubmit={handleSalvarAluno} className="relative w-full max-w-md bg-white rounded-[32px] p-6 shadow-2xl flex flex-col gap-5">
             <div className="flex justify-between items-center border-b border-slate-50 pb-4">
               <h3 className="text-lg font-black text-slate-800 tracking-tight">
-                {alunoEditando ? 'Editar Aluno' : 'Novo Aluno Manual'}
+                {alunoEditando ? t.alunosTab.editarAluno : t.alunosTab.novoAluno}
               </h3>
               <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-300 hover:text-slate-500"><X size={24} /></button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Nome Completo</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">{t.alunosTab.nomeCompleto}</label>
                 <input required type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-4 py-4 focus:ring-2 focus:ring-pink-500 outline-none font-bold text-slate-700" />
               </div>
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">WhatsApp (Opcional)</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">{t.alunosTab.wppOpcional}</label>
                 <input type="tel" value={novoTelefone} onChange={e => setNovoTelefone(e.target.value)} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-4 py-4 focus:ring-2 focus:ring-pink-500 outline-none font-bold text-slate-700" />
               </div>
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Instagram (Opcional)</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">{t.alunosTab.instaOpcional}</label>
                 <input type="text" value={novoInstagram} onChange={e => setNovoInstagram(e.target.value)} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-4 py-4 focus:ring-2 focus:ring-pink-500 outline-none font-bold text-slate-700" />
               </div>
             </div>
@@ -431,14 +418,14 @@ export default function AlunosTab() {
                 type="submit" 
                 className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all"
               >
-                {salvando ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><CheckCircle size={20} /> Salvar Dados</>}
+                {salvando ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><CheckCircle size={20} /> {t.alunosTab.salvarDados}</>}
               </button>
 
               {alunoEditando && (
                 <button 
                   type="button"
                   onClick={async () => {
-                    if (confirm("Arquivar este aluno? Ele sairá da lista principal.")) {
+                    if (confirm(t.alunosTab.confirmaArquivar)) {
                       await supabase.from('alunos').update({ excluido: true }).eq('id', alunoEditando)
                       setIsModalOpen(false)
                       carregarAlunos()
@@ -446,7 +433,7 @@ export default function AlunosTab() {
                   }}
                   className="w-full text-rose-500 font-bold py-2 text-xs uppercase tracking-widest"
                 >
-                  Arquivar Aluno
+                  {t.alunosTab.arquivar}
                 </button>
               )}
             </div>
