@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { User, ShieldCheck, Key, LogOut, CheckCircle, AlertCircle } from 'lucide-react'
+import { User, ShieldCheck, Key, LogOut, CheckCircle, AlertCircle, Globe } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { LanguageToggle } from './LanguageToggle'
 
 export default function PerfilTab() {
   const router = useRouter()
@@ -42,7 +43,7 @@ export default function PerfilTab() {
   }
 
   return (
-    <div className="px-4 py-2 flex flex-col gap-6 animate-in fade-in duration-500">
+    <div className="px-4 py-2 flex flex-col gap-6 animate-in fade-in duration-500 pb-10">
       <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2 drop-shadow-md">
         <User size={22} className="text-pink-400" />
         Meu Perfil
@@ -50,6 +51,7 @@ export default function PerfilTab() {
 
       <div className="bg-white rounded-[24px] p-6 shadow-sm border border-slate-100 flex flex-col gap-6">
         
+        {/* INFORMAÇÕES DO USUÁRIO */}
         <div className="flex items-center gap-4 pb-6 border-b border-slate-50">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-400 flex items-center justify-center text-white text-2xl font-black shadow-lg">
             {email.substring(0, 2).toUpperCase()}
@@ -64,6 +66,23 @@ export default function PerfilTab() {
           </div>
         </div>
 
+        {/* PREFERÊNCIAS DO SISTEMA (NOVO) */}
+        <div className="pb-6 border-b border-slate-50">
+          <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
+            <Globe size={16} className="text-slate-400" /> Preferências do Sistema
+          </h4>
+          
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold text-slate-700">Idioma do Painel</p>
+              <p className="text-xs text-slate-500 mt-0.5">Altere a língua das abas e menus</p>
+            </div>
+            {/* O BOTÃO DA BANDEIRA ESTÁ AQUI */}
+            <LanguageToggle />
+          </div>
+        </div>
+
+        {/* SEGURANÇA DA CONTA */}
         <div>
           <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
             <Key size={16} className="text-slate-400" /> Segurança da Conta
@@ -99,6 +118,7 @@ export default function PerfilTab() {
           </form>
         </div>
 
+        {/* BOTÃO DE SAIR */}
         <div className="pt-2">
           <button onClick={handleLogout} className="w-full bg-rose-50 text-rose-600 font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-rose-100 transition-colors">
             <LogOut size={18} /> Sair do Sistema

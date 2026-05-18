@@ -151,7 +151,6 @@ export default function TermoPage() {
 
     setSalvando(true)
     
-    // Salva "Estrangeiro" no banco se for gringo para não dar erro de CPF vazio
     const { error } = await supabase.from('termos_assinados').insert([{
       nome_aluno: nome.trim(),
       cpf: isEstrangeiro ? 'Estrangeiro' : cpf,
@@ -188,7 +187,6 @@ export default function TermoPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
 
-      {/* Header */}
       <div className="bg-gradient-to-r from-pink-700 to-pink-500 text-white px-4 py-5 shadow-sm">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -199,7 +197,6 @@ export default function TermoPage() {
             </div>
           </div>
           
-          {/* Seletor Trilingue */}
           <div className="flex bg-black/20 p-1 rounded-xl backdrop-blur-sm gap-1 border border-white/10">
             <button type="button" onClick={() => setLang('pt')} className={`px-2 py-1 text-xs rounded-lg transition-all ${lang === 'pt' ? 'bg-white shadow-sm scale-105' : 'opacity-60'}`}>🇧🇷</button>
             <button type="button" onClick={() => setLang('en')} className={`px-2 py-1 text-xs rounded-lg transition-all ${lang === 'en' ? 'bg-white shadow-sm scale-105' : 'opacity-60'}`}>🇺🇸</button>
@@ -210,7 +207,6 @@ export default function TermoPage() {
 
       <div className="max-w-lg mx-auto px-4 py-6 flex flex-col gap-6">
 
-        {/* Texto do Termo */}
         <div className="bg-white rounded-2xl shadow-sm p-5 border border-slate-100">
           <h2 className="text-base font-bold text-slate-800 mb-4 text-center uppercase tracking-wide leading-snug">
             {t.termoTitulo}
@@ -230,7 +226,6 @@ export default function TermoPage() {
           </p>
         </div>
 
-        {/* Formulário de Assinatura */}
         <div className="bg-white rounded-2xl shadow-sm p-5 border border-slate-100">
           <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
             <FileText size={18} className="text-pink-600" />
@@ -251,7 +246,6 @@ export default function TermoPage() {
               />
             </div>
 
-            {/* Checkbox Estrangeiro */}
             <label className="flex items-center gap-3 cursor-pointer py-1 bg-pink-50/30 px-3 rounded-xl border border-pink-100/50 w-fit">
               <input
                 type="checkbox"
@@ -266,7 +260,6 @@ export default function TermoPage() {
               <span className="text-xs font-bold text-pink-700">{t.checkEstrangeiro}</span>
             </label>
 
-            {/* Renderização Condicional: Apenas CPF, ou nada se for estrangeiro */}
             {!isEstrangeiro && (
               <div className="animate-in fade-in duration-200">
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.labelCpf}</label>
