@@ -46,17 +46,31 @@ export default function DashboardPage() {
     const novas: any[] = []
     const hojeStr = new Date().toISOString().split('T')[0]
 
+    // 1. Notificação de Aulas sem Professor
     const { data: aulas } = await supabase.from('registro_aulas').select('nome_professor').gte('data_aula', hojeStr)
     const semProf = aulas?.filter(a => !a.nome_professor || a.nome_professor.trim() === '' || a.nome_professor.toLowerCase() === 'sem professor') || []
     if (semProf.length > 0) {
       novas.push({ id: 'prof', tipo: 'urgente', titulo: 'Aulas sem Professor', mensagem: `Existem ${semProf.length} aulas sem professor.`, acao: 'aulas' })
     }
 
+    // 2. Notificação de Cobranças Pendentes
     const { data: pAulas } = await supabase.from('registro_aulas').select('id').in('status_pagamento', ['Pendente', 'Parcial'])
     const { data: pPacotes } = await supabase.from('pacotes').select('valor_total, valor_pago')
     const pacDevendo = pPacotes?.filter(p => Number(p.valor_pago) < Number(p.valor_total)) || []
     if ((pAulas?.length || 0) + pacDevendo.length > 0) {
       novas.push({ id: 'fin', tipo: 'alerta', titulo: 'Cobranças Pendentes', mensagem: 'Há pendências no caixa.', acao: 'pendentes' })
+    }
+
+    // 3. NOVO: Notificação de Cadastros/Termos Recebidos Hoje
+    const { data: termosHoje } = await supabase.from('termos_assinados').select('id').gte('created_at', hojeStr + 'T00:00:00Z')
+    if (termosHoje && termosHoje.length > 0) {
+      novas.push({ 
+        id: 'termos', 
+        tipo: 'sucesso', 
+        titulo: 'Novos Cadastros', 
+        mensagem: `${termosHoje.length} aluno(s) preencheram a ficha hoje!`, 
+        acao: 'termos' 
+      })
     }
 
     setNotificacoes(novas)
@@ -128,7 +142,7 @@ export default function DashboardPage() {
               {notificacoes.length > 0 ? (
                 notificacoes.map((notif, idx) => (
                   <div key={idx} onClick={() => changeTab(notif.acao)} className="p-3 hover:bg-slate-50 cursor-pointer rounded-xl transition-colors border-b border-slate-50 last:border-0 flex flex-col gap-1">
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${notif.tipo === 'urgente' ? 'text-rose-500' : 'text-amber-500'}`}>
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${notif.tipo === 'urgente' ? 'text-rose-500' : notif.tipo === 'sucesso' ? 'text-emerald-500' : 'text-amber-500'}`}>
                       {notif.tipo}
                     </span>
                     <strong className="text-sm text-slate-800">{notif.titulo}</strong>
