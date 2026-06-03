@@ -1,17 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 import { Waves, CheckCircle, ShieldCheck } from 'lucide-react'
+
+// Recriação limpa do cliente apenas para a página pública
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export default function CadastroPage() {
   const [nome, setNome] = useState('')
   const [cpf, setCpf] = useState('')
   const [aceito, setAceito] = useState(false)
-  
-  // ESTE É O ESTADO DA ARMADILHA (HONEYPOT)
   const [honeypot, setHoneypot] = useState('')
-  
   const [loading, setLoading] = useState(false)
   const [sucesso, setSucesso] = useState(false)
   const [erro, setErro] = useState('')
@@ -20,12 +22,9 @@ export default function CadastroPage() {
     e.preventDefault()
     setErro('')
     
-    // 1. A VERIFICAÇÃO DA ARMADILHA PARA ROBÔS
-    // Se o campo invisível foi preenchido, nós fingimos que deu certo para enganar o bot,
-    // mas não salvamos absolutamente nada no Supabase!
     if (honeypot.trim() !== '') {
       console.warn("Robô de spam bloqueado pela armadilha.")
-      setSucesso(true) // Finge que deu certo para o robô ir embora feliz
+      setSucesso(true) 
       return
     }
 
@@ -36,21 +35,27 @@ export default function CadastroPage() {
 
     setLoading(true)
 
-    // 2. SALVA O TERMO NO BANCO DE DADOS (Público -> Supabase)
-    const { error } = await supabase
-      .from('termos_assinados')
-      .insert([{
-        nome_aluno: nome.trim(),
-        cpf: cpf.trim()
-      }])
+    try {
+      // 1. Salva o termo assinado
+      const { error: erroTermo } = await supabase
+        .from('termos_assinados')
+        .insert([{
+          nome_aluno: nome.trim(),
+          cpf: cpf.trim(),
+          aceitou_termos: true
+        }])
 
-    setLoading(false)
+      if (erroTermo) throw erroTermo
 
-    if (error) {
-      setErro("Ops, tivemos um problema na rede. Tente novamente.")
-      console.error(error)
-    } else {
+      // 2. ADICIONADO: Salva o nome no CRM para aparecer na busca de aulas
+      await supabase.from('alunos').insert([{ nome: nome.trim() }])
+
       setSucesso(true)
+    } catch (err: any) {
+      console.error(err)
+      setErro("Ops, tivemos um problema na rede. Tente novamente.")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -72,7 +77,6 @@ export default function CadastroPage() {
     <div className="min-h-screen bg-[#f5f3ef] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
       <div className="w-full max-w-md bg-white rounded-[32px] shadow-xl overflow-hidden animate-in slide-in-from-bottom-4 duration-500 border border-slate-100">
         
-        {/* Cabeçalho */}
         <div className="bg-gradient-to-br from-[#0a1628] to-[#1a3a6e] p-8 text-center relative overflow-hidden">
           <Waves size={100} className="absolute -top-4 -right-4 text-white opacity-5" />
           <div className="relative z-10 flex flex-col items-center">
@@ -84,7 +88,6 @@ export default function CadastroPage() {
           </div>
         </div>
 
-        {/* Formulário */}
         <form onSubmit={handleSubmit} className="p-6 md:p-8 flex flex-col gap-6">
           
           {erro && (
@@ -117,8 +120,6 @@ export default function CadastroPage() {
               />
             </div>
             
-            {/* INÍCIO DA ARMADILHA PARA ROBÔS (HONEYPOT) */}
-            {/* O "hidden" do Tailwind esconde esse campo dos humanos, mas não dos robôs de leitura de código */}
             <div className="hidden" aria-hidden="true">
               <label>Deixe este campo em branco se você for humano:</label>
               <input 
@@ -130,8 +131,6 @@ export default function CadastroPage() {
                 onChange={e => setHoneypot(e.target.value)} 
               />
             </div>
-            {/* FIM DA ARMADILHA */}
-
           </div>
 
           <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 flex gap-4 mt-2">
