@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { 
   Waves, BookOpen, Receipt, BarChart2, 
-  AlertCircle, Package, Menu, UserSquare, Users, Bell, User, X, CheckCircle
+  AlertCircle, Package, Menu, UserSquare, Users, Bell, User, X, CheckCircle, Activity
 } from 'lucide-react'
 
 import AulasTab from './components/AulasTab'
@@ -16,9 +16,10 @@ import PacotesTab from './components/PacotesTab'
 import TermosTab from './components/TermosTab'
 import ProfessoresTab from './components/ProfessoresTab'
 import AlunosTab from './components/AlunosTab'
-import PerfilTab from './components/PerfilTab' 
+import PerfilTab from './components/PerfilTab'
+import AtividadesTab from './components/AtividadesTab'
 
-type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos' | 'professores' | 'alunos' | 'perfil'
+type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos' | 'professores' | 'alunos' | 'perfil' | 'atividades'
 
 const MAIN_NAV: { id: Tab; icon: React.ElementType; label: string }[] = [
   { id: 'aulas',      icon: BookOpen,  label: 'Agenda' },
@@ -95,7 +96,7 @@ export default function DashboardPage() {
     setIsNotificacoesOpen(false) 
   }
 
-  const menuTabs = ['alunos', 'professores', 'pendentes', 'termos', 'perfil']
+  const menuTabs = ['alunos', 'professores', 'pendentes', 'termos', 'perfil', 'atividades']
 
   if (checking) return <div className="min-h-screen flex items-center justify-center bg-[#f5f3ef]"><div className="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>
 
@@ -171,6 +172,7 @@ export default function DashboardPage() {
         {tab === 'professores' && <ProfessoresTab />}
         {tab === 'alunos'      && <AlunosTab />}
         {tab === 'perfil'      && <PerfilTab />}
+        {tab === 'atividades'  && <AtividadesTab />}
       </main>
 
       {isMenuOpen && (
@@ -185,6 +187,9 @@ export default function DashboardPage() {
             </button>
             <button onClick={() => changeTab('pendentes')} className={`w-full flex items-center gap-3 px-5 py-3 ${tab === 'pendentes' ? 'text-pink-600 bg-pink-50' : 'text-slate-600'}`}>
               <AlertCircle size={18} /> <span className="text-sm font-semibold">Pendentes</span>
+            </button>
+            <button onClick={() => changeTab('atividades')} className={`w-full flex items-center gap-3 px-5 py-3 ${tab === 'atividades' ? 'text-pink-600 bg-pink-50' : 'text-slate-600'}`}>
+              <Activity size={18} /> <span className="text-sm font-semibold">Atividades</span>
             </button>
             <button onClick={() => changeTab('perfil')} className={`w-full flex items-center gap-3 px-5 py-3 ${tab === 'perfil' ? 'text-pink-600 bg-pink-50' : 'text-slate-600'}`}>
               <User size={18} /> <span className="text-sm font-semibold">Meu Perfil</span>

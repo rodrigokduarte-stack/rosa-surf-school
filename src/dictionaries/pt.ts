@@ -12,5 +12,13 @@ export const pt = {
   },
   professoresTab: {
     equipe: 'Equipe de Professores', novoProfessor: 'Novo Professor', cadastreDefina: 'Cadastre e defina a taxa da aula', nomeCompleto: 'Nome Completo', exNome: 'Ex: Gabriel Medina', valorAula: 'Valor por Aula', exValor: 'Ex: 100', salvar: 'Salvar', elencoAtual: 'Elenco Atual', escolaVazia: 'Escola vazia.', nenhumProfAtivo: 'Nenhum professor ativo no momento.', aula: 'aula', erroAdd: 'Erro ao adicionar professor. O nome já existe ou a coluna "ativo" não foi criada.', confirmaArquivar: 'Tem certeza que deseja remover este professor da equipe ativa? O histórico dele será mantido nas finanças.'
+  },
+  atividadesTab: {
+    titulo: 'Histórico de Atividades',
+    subtitulo: 'Acompanhe as atualizações do sistema',
+    nenhumRegistro: 'Nenhum registro encontrado.',
+    hoje: 'Hoje',
+    ontem: 'Ontem',
+    diasAtras: 'dias atrás'
   }
 }

@@ -147,11 +147,20 @@ export default function AulasTab() {
     }
     const { error } = await supabase.from('registro_aulas').update({ excluido: true }).eq('id', aula.id)
     setExcluindo(null)
+    
     if (!error) {
       setAulasHoje(prev => prev.filter(a => a.id !== aula.id))
       setAulasProgramadas(prev => prev.filter(a => a.id !== aula.id))
       setAulaDetalheGrade(null)
       carregarPacotes() 
+
+      // REGISTRO DE HISTÓRICO - EXCLUSÃO DA AULA
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('historico_atividades').insert([{
+        usuario: user?.email || 'Sistema',
+        acao: 'Aula Arquivada',
+        detalhes: `Arquivou a aula de ${aula.nome_cliente} do dia ${aula.data_aula.split('-').reverse().join('/')}.`
+      }])
     }
   }
 
@@ -211,6 +220,14 @@ export default function AulasTab() {
           carregarPacotes()
         }
       }
+
+      // REGISTRO DE HISTÓRICO - NOVA AULA
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('historico_atividades').insert([{
+        usuario: user?.email || 'Sistema',
+        acao: 'Nova Aula',
+        detalhes: `Agendou aula para ${nomeDigitado} no dia ${dados.data_aula.split('-').reverse().join('/')}.`
+      }])
 
       setSalvando(false)
       reset({ 

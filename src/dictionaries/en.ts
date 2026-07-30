@@ -12,5 +12,13 @@ export const en = {
   },
   professoresTab: {
     equipe: 'Instructors Team', novoProfessor: 'New Instructor', cadastreDefina: 'Register and set class rate', nomeCompleto: 'Full Name', exNome: 'Ex: Kelly Slater', valorAula: 'Rate per Class', exValor: 'Ex: 100', salvar: 'Save', elencoAtual: 'Current Roster', escolaVazia: 'Empty school.', nenhumProfAtivo: 'No active instructor at the moment.', aula: 'class', erroAdd: 'Error adding instructor. Name might exist or "ativo" column is missing.', confirmaArquivar: 'Are you sure you want to remove this instructor from the active team? Their history will be kept in finances.'
+  },
+  atividadesTab: {
+    titulo: 'Activity Log',
+    subtitulo: 'Track system updates',
+    nenhumRegistro: 'No records found.',
+    hoje: 'Today',
+    ontem: 'Yesterday',
+    diasAtras: 'days ago'
   }
 }
