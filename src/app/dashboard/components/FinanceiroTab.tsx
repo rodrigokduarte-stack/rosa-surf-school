@@ -7,7 +7,7 @@ import { useLanguage } from '@/contexts/LanguageContext'
 import { 
   TrendingUp, TrendingDown, DollarSign, Clock, Users, BarChart2, 
   RefreshCw, GraduationCap, Package, Tag, Wallet, Activity, 
-  ArrowUpRight, ArrowDownRight, CreditCard, Landmark, Banknote, HelpCircle, Download
+  ArrowUpRight, ArrowDownRight, CreditCard, Landmark, Banknote, HelpCircle, Download, Send
 } from 'lucide-react'
 import AcertoProfessores from './AcertoProfessores'
 
@@ -28,10 +28,12 @@ const DADOS_VAZIOS: DadosFinanceiros = {
   receitaPacotes: 0, inadimplenciaPacotes: 0, aulasARealizar: 0,
 }
 
+// MUDANÇA AQUI: 'Depix' adicionado com o ícone 'Send'
 const ICONES_PAGAMENTO: Record<string, any> = {
   'Pix': Landmark,
   'Cartão de Crédito': CreditCard,
   'Dinheiro': Banknote,
+  'Depix': Send,
   'Outro': HelpCircle,
 }
 

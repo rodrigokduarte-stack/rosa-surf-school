@@ -13,7 +13,8 @@ import {
   Waves, Grid, List
 } from 'lucide-react'
 
-const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
+// MUDANÇA AQUI: 'Depix' adicionado à lista.
+const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Depix', 'Outro']
 
 const OPCOES_HORARIOS = Array.from({ length: 27 }, (_, i) => {
   const hora = Math.floor(i / 2) + 6
