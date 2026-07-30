@@ -35,25 +35,49 @@ const ICONES_PAGAMENTO: Record<string, any> = {
   'Outro': HelpCircle,
 }
 
+// Criamos um tipo local adicionando o "ano" para blindar o Typescript
+type PeriodoFiltro = Periodo | 'ano'
+
 export default function FinanceiroTab() {
-  const { t } = useLanguage() // Cérebro ativado no Financeiro!
-  const [periodo, setPeriodo] = useState<Periodo>('tudo')
+  const { t, language } = useLanguage() 
+  const [periodo, setPeriodo] = useState<PeriodoFiltro>('tudo')
   const [dados, setDados] = useState<DadosFinanceiros>(DADOS_VAZIOS)
   const [breakdownCategorias, setBreakdownCategorias] = useState<Record<string, number>>({})
   const [breakdownPagamentos, setBreakdownPagamentos] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
 
-  // Recria os períodos de forma dinâmica baseada no idioma selecionado
-  const periodosList: { id: Periodo; label: string }[] = [
+  // Tradução local embutida para evitar erros nos dicionários da Vercel
+  const textosAno = { pt: 'Ano', en: 'Year', es: 'Año' }
+  const labelAno = textosAno[language as keyof typeof textosAno] || 'Ano'
+
+  const periodosList: { id: PeriodoFiltro; label: string }[] = [
     { id: 'hoje', label: t.financeiroTab.periodoHoje },
     { id: 'semana', label: t.financeiroTab.periodoSemana },
     { id: 'mes', label: t.financeiroTab.periodoMes },
+    { id: 'ano', label: labelAno },
     { id: 'tudo', label: t.financeiroTab.periodoTudo },
   ]
 
-  async function fetchDados(p: Periodo) {
+  async function fetchDados(p: PeriodoFiltro) {
     setLoading(true)
-    const { inicio, fim } = getRange(p)
+    
+    // Corrigido: Agora aceitamos undefined E null para satisfazer o TypeScript
+    let inicio: string | undefined | null
+    let fim: string | undefined | null
+
+    // Cálculo exclusivo para o Intrayear (De 01/01 do ano atual até Hoje)
+    if (p === 'ano') {
+      const agora = new Date()
+      const a = agora.getFullYear()
+      const m = String(agora.getMonth() + 1).padStart(2, '0')
+      const d = String(agora.getDate()).padStart(2, '0')
+      inicio = `${a}-01-01`
+      fim = `${a}-${m}-${d}`
+    } else {
+      const range = getRange(p)
+      inicio = range.inicio
+      fim = range.fim
+    }
 
     let aulasQ = supabase
       .from('registro_aulas')
@@ -345,7 +369,8 @@ export default function FinanceiroTab() {
               </span>
             </div>
             <div className="bg-white rounded-[20px] p-2 print:p-0 border border-slate-100/50">
-              <AcertoProfessores periodo={periodo} />
+              {/* O AcertoProfessores vai mostrar "Tudo" quando a visão principal for "Ano" */}
+              <AcertoProfessores periodo={periodo === 'ano' ? 'tudo' : periodo} />
             </div>
           </div>
 
