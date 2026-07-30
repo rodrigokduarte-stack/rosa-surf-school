@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { 
   Waves, BookOpen, Receipt, BarChart2, 
-  AlertCircle, Package, Menu, UserSquare, Users, Bell, User, X, CheckCircle, Activity
+  AlertCircle, Package, Menu, UserSquare, Users, Bell, User, X, CheckCircle, Activity, Lightbulb
 } from 'lucide-react'
 
 import AulasTab from './components/AulasTab'
@@ -18,8 +18,9 @@ import ProfessoresTab from './components/ProfessoresTab'
 import AlunosTab from './components/AlunosTab'
 import PerfilTab from './components/PerfilTab'
 import AtividadesTab from './components/AtividadesTab'
+import InsightsTab from './components/InsightsTab'
 
-type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos' | 'professores' | 'alunos' | 'perfil' | 'atividades'
+type Tab = 'aulas' | 'despesas' | 'financeiro' | 'pendentes' | 'pacotes' | 'termos' | 'professores' | 'alunos' | 'perfil' | 'atividades' | 'insights'
 
 const MAIN_NAV: { id: Tab; icon: React.ElementType; label: string }[] = [
   { id: 'aulas',      icon: BookOpen,  label: 'Agenda' },
@@ -96,7 +97,7 @@ export default function DashboardPage() {
     setIsNotificacoesOpen(false) 
   }
 
-  const menuTabs = ['alunos', 'professores', 'pendentes', 'termos', 'perfil', 'atividades']
+  const menuTabs = ['alunos', 'professores', 'pendentes', 'termos', 'perfil', 'atividades', 'insights']
 
   if (checking) return <div className="min-h-screen flex items-center justify-center bg-[#f5f3ef]"><div className="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>
 
@@ -173,12 +174,16 @@ export default function DashboardPage() {
         {tab === 'alunos'      && <AlunosTab />}
         {tab === 'perfil'      && <PerfilTab />}
         {tab === 'atividades'  && <AtividadesTab />}
+        {tab === 'insights'    && <InsightsTab />}
       </main>
 
       {isMenuOpen && (
         <>
           <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm" onClick={() => setIsMenuOpen(false)} />
           <div className="fixed bottom-24 right-4 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden w-48 py-2 animate-in slide-in-from-bottom-4">
+            <button onClick={() => changeTab('insights')} className={`w-full flex items-center gap-3 px-5 py-3 ${tab === 'insights' ? 'text-pink-600 bg-pink-50' : 'text-slate-600'}`}>
+              <Lightbulb size={18} /> <span className="text-sm font-semibold">Insights</span>
+            </button>
             <button onClick={() => changeTab('alunos')} className={`w-full flex items-center gap-3 px-5 py-3 ${tab === 'alunos' ? 'text-pink-600 bg-pink-50' : 'text-slate-600'}`}>
               <UserSquare size={18} /> <span className="text-sm font-semibold">Alunos</span>
             </button>
