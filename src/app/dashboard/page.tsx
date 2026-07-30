@@ -181,9 +181,6 @@ export default function DashboardPage() {
         <>
           <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm" onClick={() => setIsMenuOpen(false)} />
           <div className="fixed bottom-24 right-4 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden w-48 py-2 animate-in slide-in-from-bottom-4">
-            <button onClick={() => changeTab('insights')} className={`w-full flex items-center gap-3 px-5 py-3 ${tab === 'insights' ? 'text-pink-600 bg-pink-50' : 'text-slate-600'}`}>
-              <Lightbulb size={18} /> <span className="text-sm font-semibold">Insights</span>
-            </button>
             <button onClick={() => changeTab('alunos')} className={`w-full flex items-center gap-3 px-5 py-3 ${tab === 'alunos' ? 'text-pink-600 bg-pink-50' : 'text-slate-600'}`}>
               <UserSquare size={18} /> <span className="text-sm font-semibold">Alunos</span>
             </button>
@@ -195,6 +192,9 @@ export default function DashboardPage() {
             </button>
             <button onClick={() => changeTab('atividades')} className={`w-full flex items-center gap-3 px-5 py-3 ${tab === 'atividades' ? 'text-pink-600 bg-pink-50' : 'text-slate-600'}`}>
               <Activity size={18} /> <span className="text-sm font-semibold">Atividades</span>
+            </button>
+            <button onClick={() => changeTab('insights')} className={`w-full flex items-center gap-3 px-5 py-3 ${tab === 'insights' ? 'text-pink-600 bg-pink-50' : 'text-slate-600'}`}>
+              <Lightbulb size={18} /> <span className="text-sm font-semibold">Insights</span>
             </button>
             <button onClick={() => changeTab('perfil')} className={`w-full flex items-center gap-3 px-5 py-3 ${tab === 'perfil' ? 'text-pink-600 bg-pink-50' : 'text-slate-600'}`}>
               <User size={18} /> <span className="text-sm font-semibold">Meu Perfil</span>
