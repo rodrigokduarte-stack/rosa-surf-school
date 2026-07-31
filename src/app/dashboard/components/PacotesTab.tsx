@@ -18,7 +18,8 @@ interface NovoPacoteForm {
   forma_pagamento?: string
 }
 
-const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
+// CORREÇÃO: 'Depix' adicionado à lista de formas de pagamento
+const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Depix', 'Outro']
 
 export default function PacotesTab() {
   const { t } = useLanguage() // Cérebro ativado!

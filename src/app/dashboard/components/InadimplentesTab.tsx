@@ -33,7 +33,8 @@ type DevedorAgrupado = {
   itens: ItemDivida[]
 }
 
-const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Outro']
+// CORREÇÃO: 'Depix' adicionado à lista de formas de pagamento
+const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Depix', 'Outro']
 
 function calcularDiasAtraso(dataReferencia: string) {
   const hoje = new Date(hojeEmBrasilia())
