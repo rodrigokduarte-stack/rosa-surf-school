@@ -38,6 +38,9 @@ export default function DashboardPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isNotificacoesOpen, setIsNotificacoesOpen] = useState(false)
   const [notificacoes, setNotificacoes] = useState<any[]>([])
+  
+  // NOVO: Estado para a bolinha vermelha inteligente
+  const [hasUnread, setHasUnread] = useState(false)
 
   const hoje = new Date()
   const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -52,22 +55,23 @@ export default function DashboardPage() {
     const { data: aulas } = await supabase.from('registro_aulas').select('nome_professor').gte('data_aula', hojeStr)
     const semProf = aulas?.filter(a => !a.nome_professor || a.nome_professor.trim() === '' || a.nome_professor.toLowerCase() === 'sem professor') || []
     if (semProf.length > 0) {
-      novas.push({ id: 'prof', tipo: 'urgente', titulo: 'Aulas sem Professor', mensagem: `Existem ${semProf.length} aulas sem professor.`, acao: 'aulas' })
+      novas.push({ id: `prof-${semProf.length}`, tipo: 'urgente', titulo: 'Aulas sem Professor', mensagem: `Existem ${semProf.length} aulas sem professor.`, acao: 'aulas' })
     }
 
     // 2. Notificação de Cobranças Pendentes
     const { data: pAulas } = await supabase.from('registro_aulas').select('id').in('status_pagamento', ['Pendente', 'Parcial'])
     const { data: pPacotes } = await supabase.from('pacotes').select('valor_total, valor_pago')
     const pacDevendo = pPacotes?.filter(p => Number(p.valor_pago) < Number(p.valor_total)) || []
-    if ((pAulas?.length || 0) + pacDevendo.length > 0) {
-      novas.push({ id: 'fin', tipo: 'alerta', titulo: 'Cobranças Pendentes', mensagem: 'Há pendências no caixa.', acao: 'pendentes' })
+    const totalPendentes = (pAulas?.length || 0) + pacDevendo.length
+    if (totalPendentes > 0) {
+      novas.push({ id: `fin-${totalPendentes}`, tipo: 'alerta', titulo: 'Cobranças Pendentes', mensagem: `Há ${totalPendentes} pendências no caixa.`, acao: 'pendentes' })
     }
 
     // 3. Notificação de Cadastros/Termos Recebidos Hoje
     const { data: termosHoje } = await supabase.from('termos_assinados').select('id').gte('created_at', hojeStr + 'T00:00:00Z')
     if (termosHoje && termosHoje.length > 0) {
       novas.push({ 
-        id: 'termos', 
+        id: `termos-${termosHoje.length}-${hojeStr}`, 
         tipo: 'sucesso', 
         titulo: 'Novos Cadastros', 
         mensagem: `${termosHoje.length} aluno(s) preencheram a ficha hoje!`, 
@@ -75,7 +79,7 @@ export default function DashboardPage() {
       })
     }
 
-    // 4. NOVO: Notificação de Atividades Recentes da Equipe (O seu pedido)
+    // 4. Notificação de Atividades Recentes da Equipe
     const { data: sessionData } = await supabase.auth.getSession()
     const emailAcesso = sessionData?.session?.user?.email || ''
 
@@ -83,11 +87,11 @@ export default function DashboardPage() {
       .from('historico_atividades')
       .select('id, usuario')
       .gte('created_at', hojeStr + 'T00:00:00Z')
-      .neq('usuario', emailAcesso) // Pulo do gato: ignora as suas próprias ações, só avisa do sócio!
+      .neq('usuario', emailAcesso) 
 
     if (atividadesHoje && atividadesHoje.length > 0) {
       novas.push({ 
-        id: 'ativ', 
+        id: `ativ-${atividadesHoje.length}-${hojeStr}`, 
         tipo: 'sucesso', 
         titulo: 'Movimentação da Equipe', 
         mensagem: `Sua equipe realizou ${atividadesHoje.length} ação(ões) hoje.`, 
@@ -96,6 +100,14 @@ export default function DashboardPage() {
     }
 
     setNotificacoes(novas)
+
+    // LÓGICA DO SININHO: Checa se há alguma notificação nova
+    const savedIds = localStorage.getItem('notifsVistas') || ''
+    const temNovaUnread = novas.some(n => !savedIds.includes(n.id))
+    
+    if (temNovaUnread) {
+      setHasUnread(true)
+    }
   }, [])
 
   useEffect(() => {
@@ -115,6 +127,15 @@ export default function DashboardPage() {
     setTab(newTab)
     setIsMenuOpen(false)
     setIsNotificacoesOpen(false) 
+  }
+
+  // NOVA FUNÇÃO: Abre as notificações e "apaga" a bolinha vermelha
+  function handleOpenNotificacoes() {
+    setIsNotificacoesOpen(true)
+    setHasUnread(false)
+    
+    const currentIds = notificacoes.map(n => n.id).join(',')
+    localStorage.setItem('notifsVistas', currentIds)
   }
 
   const menuTabs = ['alunos', 'professores', 'pendentes', 'termos', 'perfil', 'atividades', 'insights']
@@ -138,9 +159,9 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button onClick={() => setIsNotificacoesOpen(true)} className="relative w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-lg transition-transform active:scale-95">
+          <button onClick={handleOpenNotificacoes} className="relative w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-lg transition-transform active:scale-95">
             <Bell size={18} />
-            {notificacoes.length > 0 && <span className="absolute top-0 right-0 w-3.5 h-3.5 bg-rose-500 border-2 border-[#0a1628] rounded-full animate-pulse" />}
+            {hasUnread && <span className="absolute top-0 right-0 w-3.5 h-3.5 bg-rose-500 border-2 border-[#0a1628] rounded-full animate-pulse" />}
           </button>
           
           <button
