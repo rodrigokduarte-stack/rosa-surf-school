@@ -63,7 +63,7 @@ export default function DashboardPage() {
       novas.push({ id: 'fin', tipo: 'alerta', titulo: 'Cobranças Pendentes', mensagem: 'Há pendências no caixa.', acao: 'pendentes' })
     }
 
-    // 3. NOVO: Notificação de Cadastros/Termos Recebidos Hoje
+    // 3. Notificação de Cadastros/Termos Recebidos Hoje
     const { data: termosHoje } = await supabase.from('termos_assinados').select('id').gte('created_at', hojeStr + 'T00:00:00Z')
     if (termosHoje && termosHoje.length > 0) {
       novas.push({ 
@@ -72,6 +72,26 @@ export default function DashboardPage() {
         titulo: 'Novos Cadastros', 
         mensagem: `${termosHoje.length} aluno(s) preencheram a ficha hoje!`, 
         acao: 'termos' 
+      })
+    }
+
+    // 4. NOVO: Notificação de Atividades Recentes da Equipe (O seu pedido)
+    const { data: sessionData } = await supabase.auth.getSession()
+    const emailAcesso = sessionData?.session?.user?.email || ''
+
+    const { data: atividadesHoje } = await supabase
+      .from('historico_atividades')
+      .select('id, usuario')
+      .gte('created_at', hojeStr + 'T00:00:00Z')
+      .neq('usuario', emailAcesso) // Pulo do gato: ignora as suas próprias ações, só avisa do sócio!
+
+    if (atividadesHoje && atividadesHoje.length > 0) {
+      novas.push({ 
+        id: 'ativ', 
+        tipo: 'sucesso', 
+        titulo: 'Movimentação da Equipe', 
+        mensagem: `Sua equipe realizou ${atividadesHoje.length} ação(ões) hoje.`, 
+        acao: 'atividades' 
       })
     }
 
