@@ -39,7 +39,6 @@ export default function DashboardPage() {
   const [isNotificacoesOpen, setIsNotificacoesOpen] = useState(false)
   const [notificacoes, setNotificacoes] = useState<any[]>([])
   
-  // NOVO: Estado para a bolinha vermelha inteligente
   const [hasUnread, setHasUnread] = useState(false)
 
   const hoje = new Date()
@@ -51,16 +50,16 @@ export default function DashboardPage() {
     const novas: any[] = []
     const hojeStr = new Date().toISOString().split('T')[0]
 
-    // 1. Notificação de Aulas sem Professor
-    const { data: aulas } = await supabase.from('registro_aulas').select('nome_professor').gte('data_aula', hojeStr)
+    // 1. Notificação de Aulas sem Professor (Agora ignorando as excluídas)
+    const { data: aulas } = await supabase.from('registro_aulas').select('nome_professor').gte('data_aula', hojeStr).eq('excluido', false)
     const semProf = aulas?.filter(a => !a.nome_professor || a.nome_professor.trim() === '' || a.nome_professor.toLowerCase() === 'sem professor') || []
     if (semProf.length > 0) {
       novas.push({ id: `prof-${semProf.length}`, tipo: 'urgente', titulo: 'Aulas sem Professor', mensagem: `Existem ${semProf.length} aulas sem professor.`, acao: 'aulas' })
     }
 
-    // 2. Notificação de Cobranças Pendentes
-    const { data: pAulas } = await supabase.from('registro_aulas').select('id').in('status_pagamento', ['Pendente', 'Parcial'])
-    const { data: pPacotes } = await supabase.from('pacotes').select('valor_total, valor_pago')
+    // 2. Notificação de Cobranças Pendentes (Agora ignorando as excluídas)
+    const { data: pAulas } = await supabase.from('registro_aulas').select('id').in('status_pagamento', ['Pendente', 'Parcial']).eq('excluido', false)
+    const { data: pPacotes } = await supabase.from('pacotes').select('valor_total, valor_pago').eq('excluido', false)
     const pacDevendo = pPacotes?.filter(p => Number(p.valor_pago) < Number(p.valor_total)) || []
     const totalPendentes = (pAulas?.length || 0) + pacDevendo.length
     if (totalPendentes > 0) {
@@ -101,7 +100,7 @@ export default function DashboardPage() {
 
     setNotificacoes(novas)
 
-    // LÓGICA DO SININHO: Checa se há alguma notificação nova
+    // LÓGICA DO SININHO
     const savedIds = localStorage.getItem('notifsVistas') || ''
     const temNovaUnread = novas.some(n => !savedIds.includes(n.id))
     
@@ -129,7 +128,6 @@ export default function DashboardPage() {
     setIsNotificacoesOpen(false) 
   }
 
-  // NOVA FUNÇÃO: Abre as notificações e "apaga" a bolinha vermelha
   function handleOpenNotificacoes() {
     setIsNotificacoesOpen(true)
     setHasUnread(false)
