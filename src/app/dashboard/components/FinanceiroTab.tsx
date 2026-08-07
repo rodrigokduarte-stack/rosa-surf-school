@@ -7,7 +7,8 @@ import { useLanguage } from '@/contexts/LanguageContext'
 import { 
   TrendingUp, TrendingDown, DollarSign, Clock, Users, BarChart2, 
   RefreshCw, GraduationCap, Package, Tag, Wallet, Activity, 
-  ArrowUpRight, ArrowDownRight, CreditCard, Landmark, Banknote, HelpCircle, Download, Send
+  ArrowUpRight, ArrowDownRight, CreditCard, Landmark, Banknote, HelpCircle, Download, Send,
+  List, X, ArrowUpCircle, ArrowDownCircle
 } from 'lucide-react'
 import AcertoProfessores from './AcertoProfessores'
 
@@ -22,13 +23,22 @@ interface DadosFinanceiros {
   aulasARealizar: number
 }
 
+// NOVO: Tipo para o Extrato
+interface Transacao {
+  id: string
+  data: string
+  tipo: 'entrada' | 'saida'
+  descricao: string
+  valor: number
+  categoriaOuForma: string
+}
+
 const DADOS_VAZIOS: DadosFinanceiros = {
   faturamentoBruto: 0, aReceber: 0,
   custoProfessores: 0, custosOperacionais: 0, totalAulas: 0,
   receitaPacotes: 0, inadimplenciaPacotes: 0, aulasARealizar: 0,
 }
 
-// MUDANÇA AQUI: 'Depix' adicionado com o ícone 'Send'
 const ICONES_PAGAMENTO: Record<string, any> = {
   'Pix': Landmark,
   'Cartão de Crédito': CreditCard,
@@ -37,7 +47,6 @@ const ICONES_PAGAMENTO: Record<string, any> = {
   'Outro': HelpCircle,
 }
 
-// Criamos um tipo local adicionando o "ano" para blindar o Typescript
 type PeriodoFiltro = Periodo | 'ano'
 
 export default function FinanceiroTab() {
@@ -47,10 +56,20 @@ export default function FinanceiroTab() {
   const [breakdownCategorias, setBreakdownCategorias] = useState<Record<string, number>>({})
   const [breakdownPagamentos, setBreakdownPagamentos] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
+  
+  // NOVO: Estado para o Extrato
+  const [extratoAberto, setExtratoAberto] = useState(false)
+  const [transacoes, setTransacoes] = useState<Transacao[]>([])
 
-  // Tradução local embutida para evitar erros nos dicionários da Vercel
   const textosAno = { pt: 'Ano', en: 'Year', es: 'Año' }
   const labelAno = textosAno[language as keyof typeof textosAno] || 'Ano'
+
+  const textosExtrato = { 
+    pt: { btn: 'Ver Extrato Detalhado', titulo: 'Extrato Financeiro', subtitulo: 'Todas as entradas e saídas do período', vazio: 'Nenhuma movimentação neste período.', entrada: 'Entrada', saida: 'Saída' },
+    en: { btn: 'View Detailed Statement', titulo: 'Financial Statement', subtitulo: 'All inflows and outflows of the period', vazio: 'No transactions in this period.', entrada: 'Inflow', saida: 'Outflow' },
+    es: { btn: 'Ver Extracto Detallado', titulo: 'Extracto Financiero', subtitulo: 'Todas las entradas y salidas del período', vazio: 'No hay movimientos en este período.', entrada: 'Entrada', saida: 'Salida' }
+  }
+  const tEx = textosExtrato[language as keyof typeof textosExtrato] || textosExtrato.pt
 
   const periodosList: { id: PeriodoFiltro; label: string }[] = [
     { id: 'hoje', label: t.financeiroTab.periodoHoje },
@@ -63,11 +82,9 @@ export default function FinanceiroTab() {
   async function fetchDados(p: PeriodoFiltro) {
     setLoading(true)
     
-    // Corrigido: Agora aceitamos undefined E null para satisfazer o TypeScript
     let inicio: string | undefined | null
     let fim: string | undefined | null
 
-    // Cálculo exclusivo para o Intrayear (De 01/01 do ano atual até Hoje)
     if (p === 'ano') {
       const agora = new Date()
       const a = agora.getFullYear()
@@ -83,17 +100,17 @@ export default function FinanceiroTab() {
 
     let aulasQ = supabase
       .from('registro_aulas')
-      .select('valor_aula, valor_pago, status_pagamento, nome_professor, forma_pagamento')
+      .select('id, data_aula, valor_aula, valor_pago, status_pagamento, nome_professor, forma_pagamento, nome_cliente')
       .eq('excluido', false)
 
     if (inicio) aulasQ = aulasQ.gte('data_aula', inicio)
     if (fim) aulasQ = aulasQ.lte('data_aula', fim)
 
-    let custosQ = supabase.from('despesas').select('valor, categoria').eq('excluido', false)
+    let custosQ = supabase.from('despesas').select('id, data_despesa, valor, categoria, descricao').eq('excluido', false)
     if (inicio) custosQ = custosQ.gte('data_despesa', inicio)
     if (fim) custosQ = custosQ.lte('data_despesa', fim)
 
-    let pacotesQ = supabase.from('pacotes').select('valor_total, valor_pago, aulas_restantes, forma_pagamento, created_at').eq('excluido', false)
+    let pacotesQ = supabase.from('pacotes').select('id, created_at, valor_total, valor_pago, aulas_restantes, forma_pagamento, nome_cliente').eq('excluido', false)
     if (inicio) pacotesQ = pacotesQ.gte('created_at', inicio + 'T00:00:00Z')
     if (fim) pacotesQ = pacotesQ.lte('created_at', fim + 'T23:59:59Z')
 
@@ -120,14 +137,22 @@ export default function FinanceiroTab() {
     )
 
     const pagamentosMap: Record<string, number> = {}
+    const listaTransacoes: Transacao[] = []
     
     aulasList.forEach(a => {
+      const valorEfetivo = a.status_pagamento === 'Parcial' ? Number(a.valor_pago || 0) : Number(a.valor_aula || a.valor_pago || 0)
       if (a.status_pagamento === 'Pago' || a.status_pagamento === 'Parcial') {
         const forma = a.forma_pagamento || t.financeiroTab.naoInformado
-        const valorEfetivo = a.status_pagamento === 'Parcial' ? Number(a.valor_pago || 0) : Number(a.valor_aula || a.valor_pago || 0)
-        
         if (valorEfetivo > 0) {
           pagamentosMap[forma] = (pagamentosMap[forma] ?? 0) + valorEfetivo
+          listaTransacoes.push({
+            id: `aula-${a.id}`,
+            data: a.data_aula,
+            tipo: 'entrada',
+            descricao: `Aula: ${a.nome_cliente || 'Avulsa'}`,
+            valor: valorEfetivo,
+            categoriaOuForma: forma
+          })
         }
       }
     })
@@ -137,8 +162,31 @@ export default function FinanceiroTab() {
       if (valorPagoPacote > 0) {
         const forma = (p as any).forma_pagamento || t.financeiroTab.naoInformado
         pagamentosMap[forma] = (pagamentosMap[forma] ?? 0) + valorPagoPacote
+        listaTransacoes.push({
+            id: `pac-${p.id}`,
+            data: p.created_at.split('T')[0],
+            tipo: 'entrada',
+            descricao: `Pacote: ${p.nome_cliente}`,
+            valor: valorPagoPacote,
+            categoriaOuForma: forma
+        })
       }
     })
+    
+    custosList.forEach(c => {
+        listaTransacoes.push({
+            id: `desp-${c.id}`,
+            data: c.data_despesa,
+            tipo: 'saida',
+            descricao: c.descricao || 'Despesa',
+            valor: Number(c.valor),
+            categoriaOuForma: c.categoria || 'Outros'
+        })
+    })
+
+    // Ordena do mais recente pro mais antigo
+    listaTransacoes.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+    setTransacoes(listaTransacoes)
 
     setBreakdownPagamentos(pagamentosMap)
 
@@ -298,6 +346,14 @@ export default function FinanceiroTab() {
               <span className="text-xl font-black text-slate-800 tracking-tight">{formatarValor(dados.custosOperacionais)}</span>
             </div>
           </div>
+          
+          {/* BOTAO PARA ABRIR O EXTRATO */}
+          <button 
+            onClick={() => setExtratoAberto(true)}
+            className="w-full bg-slate-800 text-white font-bold text-sm py-4 rounded-[20px] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform print:hidden"
+          >
+            <List size={18} /> {tEx.btn}
+          </button>
 
           {dados.totalAulas > 0 && (
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest text-center mt-2">
@@ -376,6 +432,63 @@ export default function FinanceiroTab() {
             </div>
           </div>
 
+        </div>
+      )}
+      
+      {/* MODAL TELA CHEIA DO EXTRATO DETALHADO */}
+      {extratoAberto && (
+        <div className="fixed inset-0 z-[100] bg-white flex flex-col animate-in slide-in-from-bottom-full duration-300 print:hidden">
+          <div className="pt-10 pb-4 px-6 bg-slate-900 text-white flex items-center justify-between shadow-md">
+            <div>
+              <h2 className="text-xl font-black flex items-center gap-2">
+                <List size={22} className="text-pink-400" /> {tEx.titulo}
+              </h2>
+              <p className="text-xs text-slate-400 font-medium mt-1">{tEx.subtitulo}</p>
+            </div>
+            <button 
+              onClick={() => setExtratoAberto(false)}
+              className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
+            {transacoes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                    <List size={48} className="mb-4 opacity-20" />
+                    <p className="text-sm font-medium">{tEx.vazio}</p>
+                </div>
+            ) : (
+                <div className="flex flex-col gap-3 pb-20">
+                    {transacoes.map((t, idx) => {
+                        const isEntrada = t.tipo === 'entrada'
+                        return (
+                            <div key={t.id + idx} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isEntrada ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}`}>
+                                        {isEntrada ? <ArrowDownCircle size={20} /> : <ArrowUpCircle size={20} />}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800 leading-tight">{t.descricao}</p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className="text-[10px] font-black uppercase text-slate-400">{t.data.split('-').reverse().join('/')}</span>
+                                            <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                            <span className="text-[10px] font-bold text-slate-500">{t.categoriaOuForma}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                    <span className={`text-base font-black ${isEntrada ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        {isEntrada ? '+' : '-'} {formatarValor(t.valor)}
+                                    </span>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
+          </div>
         </div>
       )}
     </div>
