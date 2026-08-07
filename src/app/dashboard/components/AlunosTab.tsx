@@ -6,7 +6,7 @@ import { useLanguage } from '@/contexts/LanguageContext'
 import { pt } from '@/dictionaries/pt'
 import { 
   UserSquare, Search, ChevronDown, ChevronUp, 
-  Phone, Calendar, User, FileText, Trash2, Waves, MessageCircle, X
+  Phone, Calendar, User, FileText, Trash2, Waves, MessageCircle, X, Link
 } from 'lucide-react'
 
 export default function AlunosTab() {
@@ -15,9 +15,10 @@ export default function AlunosTab() {
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
   
-  // Envio de Termo (WhatsApp)
+  // Envio de Termo (WhatsApp e Copiar)
   const [mostrarWpp, setMostrarWpp] = useState(false)
   const [numero, setNumero] = useState('')
+  const [linkCopiado, setLinkCopiado] = useState(false)
 
   // CRM States
   const [alunoExpandido, setAlunoExpandido] = useState<string | null>(null)
@@ -56,6 +57,14 @@ export default function AlunosTab() {
     window.open(`https://wa.me/${digits}?text=${texto}`, '_blank')
     setMostrarWpp(false)
     setNumero('')
+  }
+
+  // Função para copiar o link
+  async function copiarLink() {
+    const url = typeof window !== 'undefined' ? `${window.location.origin}/termo` : '/termo'
+    await navigator.clipboard.writeText(url)
+    setLinkCopiado(true)
+    setTimeout(() => setLinkCopiado(false), 2000)
   }
 
   // Função para chamar o aluno direto no WPP
@@ -144,7 +153,7 @@ export default function AlunosTab() {
         </div>
       </div>
 
-      {/* BOTÃO DE ENVIAR TERMO POR WPP (Restaurado) */}
+      {/* BOTÕES DE ENVIAR TERMO E COPIAR LINK */}
       <div className="flex flex-col gap-3">
         <button
           onClick={() => setMostrarWpp(v => !v)}
@@ -178,6 +187,14 @@ export default function AlunosTab() {
             </button>
           </div>
         )}
+
+        <button
+          onClick={copiarLink}
+          className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-600 font-medium py-3 rounded-2xl text-sm transition-colors active:bg-slate-50"
+        >
+          <Link size={16} />
+          {linkCopiado ? (t.termosTab?.linkCopiado || 'Link Copiado!') : (t.termosTab?.copiarLink || 'Copiar Link do Termo')}
+        </button>
       </div>
 
       {loading ? (
