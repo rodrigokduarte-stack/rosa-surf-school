@@ -6,7 +6,7 @@ import { useLanguage } from '@/contexts/LanguageContext'
 import { pt } from '@/dictionaries/pt'
 import { 
   UserSquare, Search, ChevronDown, ChevronUp, 
-  Phone, Calendar, User, FileText, Trash2, Waves, MessageCircle, X, Surfboard
+  Phone, Calendar, User, FileText, Trash2, Waves, MessageCircle, X
 } from 'lucide-react'
 
 export default function AlunosTab() {
