@@ -48,16 +48,22 @@ export default function DashboardPage() {
 
   const carregarNotificacoes = useCallback(async () => {
     const novas: any[] = []
-    const hojeStr = new Date().toISOString().split('T')[0]
+    
+    // Garante que o "hoje" é calculado no fuso correto (resolve bugs de teste à noite)
+    const dataAgora = new Date()
+    const ano = dataAgora.getFullYear()
+    const mes = String(dataAgora.getMonth() + 1).padStart(2, '0')
+    const dia = String(dataAgora.getDate()).padStart(2, '0')
+    const hojeStr = `${ano}-${mes}-${dia}`
 
-    // 1. Notificação de Aulas sem Professor (Agora ignorando as excluídas)
+    // 1. Notificação de Aulas sem Professor
     const { data: aulas } = await supabase.from('registro_aulas').select('nome_professor').gte('data_aula', hojeStr).eq('excluido', false)
     const semProf = aulas?.filter(a => !a.nome_professor || a.nome_professor.trim() === '' || a.nome_professor.toLowerCase() === 'sem professor') || []
     if (semProf.length > 0) {
       novas.push({ id: `prof-${semProf.length}`, tipo: 'urgente', titulo: 'Aulas sem Professor', mensagem: `Existem ${semProf.length} aulas sem professor.`, acao: 'aulas' })
     }
 
-    // 2. Notificação de Cobranças Pendentes (Agora ignorando as excluídas)
+    // 2. Notificação de Cobranças Pendentes
     const { data: pAulas } = await supabase.from('registro_aulas').select('id').in('status_pagamento', ['Pendente', 'Parcial']).eq('excluido', false)
     const { data: pPacotes } = await supabase.from('pacotes').select('valor_total, valor_pago').eq('excluido', false)
     const pacDevendo = pPacotes?.filter(p => Number(p.valor_pago) < Number(p.valor_total)) || []
@@ -66,14 +72,14 @@ export default function DashboardPage() {
       novas.push({ id: `fin-${totalPendentes}`, tipo: 'alerta', titulo: 'Cobranças Pendentes', mensagem: `Há ${totalPendentes} pendências no caixa.`, acao: 'pendentes' })
     }
 
-    // 3. Notificação de Cadastros/Termos Recebidos Hoje
+    // 3. Notificação de Cadastros/Termos Recebidos Hoje (Aqui entra o seu teste do Link!)
     const { data: termosHoje } = await supabase.from('termos_assinados').select('id').gte('created_at', hojeStr + 'T00:00:00Z')
     if (termosHoje && termosHoje.length > 0) {
       novas.push({ 
         id: `termos-${termosHoje.length}-${hojeStr}`, 
         tipo: 'sucesso', 
-        titulo: 'Novos Cadastros', 
-        mensagem: `${termosHoje.length} aluno(s) preencheram a ficha hoje!`, 
+        titulo: 'Novo Aluno Registrado!', 
+        mensagem: `${termosHoje.length} aluno(s) assinaram o termo online hoje.`, 
         acao: 'termos' 
       })
     }
@@ -86,7 +92,8 @@ export default function DashboardPage() {
       .from('historico_atividades')
       .select('id, usuario')
       .gte('created_at', hojeStr + 'T00:00:00Z')
-      .neq('usuario', emailAcesso) 
+      .neq('usuario', emailAcesso)
+      .neq('usuario', 'Link do Termo (Web)') // Ignora o termo aqui para não avisar 2 vezes
 
     if (atividadesHoje && atividadesHoje.length > 0) {
       novas.push({ 
@@ -121,6 +128,23 @@ export default function DashboardPage() {
       }
     })
   }, [router, carregarNotificacoes])
+
+  // A MÁGICA EM TEMPO REAL ACONTECE AQUI!
+  useEffect(() => {
+    const canalNotificacoes = supabase
+      .channel('tempo_real_notificacoes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'termos_assinados' }, () => {
+        carregarNotificacoes() // Atualiza os termos na hora
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'historico_atividades' }, () => {
+        carregarNotificacoes() // Atualiza atividades da equipe na hora
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(canalNotificacoes)
+    }
+  }, [carregarNotificacoes])
 
   function changeTab(newTab: Tab) {
     setTab(newTab)
