@@ -2,14 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useLanguage } from '@/contexts/LanguageContext'
 import { 
   UserSquare, Search, ChevronDown, ChevronUp, 
-  Phone, Calendar, User, FileText, Trash2, AlertTriangle, Surfboard
+  Phone, Calendar, User, FileText, Trash2, Waves 
 } from 'lucide-react'
 
 export default function AlunosTab() {
-  const { t } = useLanguage()
   const [alunos, setAlunos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
@@ -155,7 +153,7 @@ export default function AlunosTab() {
                     
                     <div className="mb-4">
                       <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                        <Surfboard size={14} className="text-pink-500" />
+                        <Waves size={14} className="text-pink-500" />
                         Histórico de Aulas
                       </h4>
                       
