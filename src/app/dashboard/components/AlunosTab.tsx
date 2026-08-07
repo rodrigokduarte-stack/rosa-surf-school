@@ -2,16 +2,23 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '@/contexts/LanguageContext'
+import { pt } from '@/dictionaries/pt'
 import { 
   UserSquare, Search, ChevronDown, ChevronUp, 
-  Phone, Calendar, User, FileText, Trash2, Waves 
+  Phone, Calendar, User, FileText, Trash2, Waves, MessageCircle, X, Surfboard
 } from 'lucide-react'
 
 export default function AlunosTab() {
+  const { t } = useLanguage()
   const [alunos, setAlunos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
   
+  // Envio de Termo (WhatsApp)
+  const [mostrarWpp, setMostrarWpp] = useState(false)
+  const [numero, setNumero] = useState('')
+
   // CRM States
   const [alunoExpandido, setAlunoExpandido] = useState<string | null>(null)
   const [historicoAulas, setHistoricoAulas] = useState<any[]>([])
@@ -32,6 +39,37 @@ export default function AlunosTab() {
 
   useEffect(() => { carregarAlunos() }, [carregarAlunos])
 
+  // Função para enviar o link do termo para um número qualquer
+  function gerarLinkWhatsApp() {
+    let digits = numero.replace(/[^\d+]/g, '') 
+    if (digits.replace(/\D/g, '').length < 7) return
+    
+    if (!digits.startsWith('+')) {
+      digits = '55' + digits
+    } else {
+      digits = digits.replace('+', '') 
+    }
+
+    const url = typeof window !== 'undefined' ? window.location.origin : ''
+    const textoPadrao = pt?.termosTab?.textoWpp || 'Olá! Segue o link para assinar o termo de responsabilidade da Rosa Surf School:'
+    const texto = encodeURIComponent(`${textoPadrao} ${url}/termo`)
+    window.open(`https://wa.me/${digits}?text=${texto}`, '_blank')
+    setMostrarWpp(false)
+    setNumero('')
+  }
+
+  // Função para chamar o aluno direto no WPP
+  function chamarAlunoWhatsApp(telefone: string, nome: string) {
+    let digits = telefone.replace(/[^\d+]/g, '')
+    if (digits.length < 7) return
+    if (!digits.startsWith('+')) digits = '55' + digits
+    else digits = digits.replace('+', '')
+    
+    const primeiroNome = nome.split(' ')[0]
+    const texto = encodeURIComponent(`Fala ${primeiroNome}! Tudo bem? Aqui é da Rosa Surf School 🏄‍♂️`)
+    window.open(`https://wa.me/${digits}?text=${texto}`, '_blank')
+  }
+
   // Busca o histórico do aluno quando clica para expandir
   async function toggleExpandirAluno(aluno: any) {
     if (alunoExpandido === aluno.id) {
@@ -43,7 +81,6 @@ export default function AlunosTab() {
     setLoadingHistorico(true)
     setHistoricoAulas([])
 
-    // Busca todas as aulas que tenham o nome desse cliente
     const { data } = await supabase
       .from('registro_aulas')
       .select('*')
@@ -107,6 +144,42 @@ export default function AlunosTab() {
         </div>
       </div>
 
+      {/* BOTÃO DE ENVIAR TERMO POR WPP (Restaurado) */}
+      <div className="flex flex-col gap-3">
+        <button
+          onClick={() => setMostrarWpp(v => !v)}
+          className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#1ebe5c] text-white font-semibold py-4 rounded-2xl shadow-sm transition-colors"
+        >
+          <MessageCircle size={20} />
+          {t.termosTab?.enviarWpp || 'Enviar Link do Termo (WhatsApp)'}
+        </button>
+
+        {mostrarWpp && (
+          <div className="bg-white rounded-2xl shadow-sm p-4 border border-slate-100 animate-in slide-in-from-top-2">
+            <div className="flex items-center justify-between mb-3">
+              <p className="font-semibold text-slate-700 text-sm">Enviar termo para qual número?</p>
+              <button onClick={() => setMostrarWpp(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+            <input
+              type="tel"
+              value={numero}
+              onChange={e => setNumero(e.target.value)}
+              placeholder="Ex: 48 9999-9999"
+              className="w-full border border-slate-200 rounded-xl px-4 py-3.5 focus:outline-none focus:border-[#25D366] focus:ring-1 focus:ring-[#25D366]"
+            />
+            <button
+              onClick={gerarLinkWhatsApp}
+              disabled={numero.replace(/\D/g, '').length < 7}
+              className="mt-3 w-full bg-[#25D366] text-white font-semibold py-3.5 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 transition-transform active:scale-95"
+            >
+              <MessageCircle size={18} /> Abrir WhatsApp
+            </button>
+          </div>
+        )}
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-10">
           <div className="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
@@ -124,7 +197,7 @@ export default function AlunosTab() {
             return (
               <div key={aluno.id} className="bg-white rounded-[20px] shadow-sm border border-slate-100 overflow-hidden transition-all">
                 
-                {/* Cabeçalho do Card (Sempre visível) */}
+                {/* Cabeçalho do Card */}
                 <div 
                   onClick={() => toggleExpandirAluno(aluno)}
                   className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
@@ -142,7 +215,7 @@ export default function AlunosTab() {
                       )}
                     </div>
                   </div>
-                  <div className="text-slate-400">
+                  <div className="text-slate-400 shrink-0">
                     {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                   </div>
                 </div>
@@ -151,6 +224,16 @@ export default function AlunosTab() {
                 {isExpanded && (
                   <div className="px-4 pb-4 pt-2 border-t border-slate-100 bg-slate-50/50 animate-in slide-in-from-top-2 duration-200">
                     
+                    {/* Botão de Chamar no WPP se tiver telefone */}
+                    {aluno.telefone && (
+                      <button 
+                        onClick={() => chamarAlunoWhatsApp(aluno.telefone, aluno.nome)}
+                        className="w-full mb-4 flex items-center justify-center gap-2 bg-[#25D366]/10 text-[#075e54] border border-[#25D366]/30 font-bold text-[13px] py-2.5 rounded-xl transition-transform active:scale-95"
+                      >
+                        <MessageCircle size={16} /> Chamar no WhatsApp
+                      </button>
+                    )}
+
                     <div className="mb-4">
                       <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                         <Waves size={14} className="text-pink-500" />
