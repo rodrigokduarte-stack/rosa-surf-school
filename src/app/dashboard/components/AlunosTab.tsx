@@ -241,6 +241,26 @@ export default function AlunosTab() {
                 {isExpanded && (
                   <div className="px-4 pb-4 pt-2 border-t border-slate-100 bg-slate-50/50 animate-in slide-in-from-top-2 duration-200">
                     
+                    {/* NOVO CAMPO DE CELULAR */}
+                    <div className="mb-4">
+                      <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">
+                        Celular (WhatsApp)
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="Adicionar número (ex: 48 9999-9999)..."
+                        defaultValue={aluno.telefone || ''}
+                        onBlur={async (e) => {
+                          const novoTel = e.target.value
+                          await supabase.from('alunos').update({ telefone: novoTel }).eq('id', aluno.id)
+                          
+                          // Atualiza o estado local para exibir o botão do WhatsApp imediatamente
+                          setAlunos(prevAlunos => prevAlunos.map(a => a.id === aluno.id ? { ...a, telefone: novoTel } : a))
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                      />
+                    </div>
+
                     {/* Botão de Chamar no WPP se tiver telefone */}
                     {aluno.telefone && (
                       <button 
