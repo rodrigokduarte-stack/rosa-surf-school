@@ -8,7 +8,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, Clock, Users, BarChart2, 
   RefreshCw, GraduationCap, Package, Tag, Wallet, Activity, 
   ArrowUpRight, ArrowDownRight, CreditCard, Landmark, Banknote, HelpCircle, Download, Send,
-  List, X, ArrowUpCircle, ArrowDownCircle
+  List, X, ArrowUpCircle, ArrowDownCircle, ChevronDown
 } from 'lucide-react'
 import AcertoProfessores from './AcertoProfessores'
 
@@ -23,7 +23,6 @@ interface DadosFinanceiros {
   aulasARealizar: number
 }
 
-// NOVO: Tipo para o Extrato
 interface Transacao {
   id: string
   data: string
@@ -47,17 +46,34 @@ const ICONES_PAGAMENTO: Record<string, any> = {
   'Outro': HelpCircle,
 }
 
-type PeriodoFiltro = Periodo | 'ano'
+// ADICIONADO: 'mes_especifico' aos tipos de filtro
+type PeriodoFiltro = Periodo | 'ano' | 'mes_especifico'
+
+// FUNÇÃO PARA GERAR OS ÚLTIMOS 24 MESES
+function gerarUltimosMeses(qtd = 24) {
+  const meses = []
+  const hoje = new Date()
+  for (let i = 0; i < qtd; i++) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+    const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const nomeMes = d.toLocaleString('pt-BR', { month: 'short' }).replace('.', '')
+    const ano = d.getFullYear()
+    meses.push({ valor, label: `${nomeMes}/${ano}` })
+  }
+  return meses
+}
+
+const ultimosMeses = gerarUltimosMeses(24)
 
 export default function FinanceiroTab() {
   const { t, language } = useLanguage() 
   const [periodo, setPeriodo] = useState<PeriodoFiltro>('tudo')
+  const [mesSelecionado, setMesSelecionado] = useState<string>('') // Guarda o mês escolhido no Dropdown
   const [dados, setDados] = useState<DadosFinanceiros>(DADOS_VAZIOS)
   const [breakdownCategorias, setBreakdownCategorias] = useState<Record<string, number>>({})
   const [breakdownPagamentos, setBreakdownPagamentos] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   
-  // NOVO: Estado para o Extrato
   const [extratoAberto, setExtratoAberto] = useState(false)
   const [transacoes, setTransacoes] = useState<Transacao[]>([])
 
@@ -92,6 +108,21 @@ export default function FinanceiroTab() {
       const d = String(agora.getDate()).padStart(2, '0')
       inicio = `${a}-01-01`
       fim = `${a}-${m}-${d}`
+    } else if (p === 'mes_especifico' && mesSelecionado) {
+      // Lógica para pegar exatamente do dia 1 ao último dia do mês que você escolheu no dropdown
+      const [anoStr, mesStr] = mesSelecionado.split('-')
+      const ano = parseInt(anoStr)
+      const mes = parseInt(mesStr) 
+
+      const primeiroDia = new Date(ano, mes - 1, 1)
+      const ultimoDia = new Date(ano, mes, 0)
+      
+      const y = primeiroDia.getFullYear()
+      const m = String(primeiroDia.getMonth() + 1).padStart(2, '0')
+      const d = String(ultimoDia.getDate()).padStart(2, '0')
+      
+      inicio = `${y}-${m}-01`
+      fim = `${y}-${m}-${d}`
     } else {
       const range = getRange(p)
       inicio = range.inicio
@@ -184,7 +215,6 @@ export default function FinanceiroTab() {
         })
     })
 
-    // Ordena do mais recente pro mais antigo
     listaTransacoes.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
     setTransacoes(listaTransacoes)
 
@@ -225,20 +255,27 @@ export default function FinanceiroTab() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchDados(periodo) }, [periodo, t])
+  // Aciona a busca toda vez que o período ou o mês específico mudar
+  useEffect(() => { fetchDados(periodo) }, [periodo, mesSelecionado, t])
 
   const lucroLiquido = dados.faturamentoBruto - dados.custoProfessores - dados.custosOperacionais
   
-  // NOVO CÁLCULO DA COMISSÃO DE 10%
+  // CÁLCULO DA COMISSÃO DE 10%
   const comissao = lucroLiquido > 0 ? lucroLiquido * 0.10 : 0
   
-  const labelPeriodo = periodosList.find(p => p.id === periodo)?.label ?? ''
+  // NOME BONITO PARA O PDF DEPENDENDO DO FILTRO
+  let labelPeriodo = periodosList.find(p => p.id === periodo)?.label ?? ''
+  if (periodo === 'mes_especifico') {
+    const obj = ultimosMeses.find(m => m.valor === mesSelecionado)
+    labelPeriodo = obj ? obj.label.toUpperCase() : 'MÊS ESPECÍFICO'
+  }
+
   const margem = dados.faturamentoBruto > 0 ? Math.round((lucroLiquido / dados.faturamentoBruto) * 100) : 0
 
   const tituloPagamento = 
     periodo === 'hoje' ? t.financeiroTab.quemPagarHoje :
     periodo === 'semana' ? t.financeiroTab.quemPagarSemana :
-    periodo === 'mes' ? t.financeiroTab.quemPagarMes :
+    (periodo === 'mes' || periodo === 'mes_especifico') ? t.financeiroTab.quemPagarMes :
     t.financeiroTab.historicoPagamentos
 
   return (
@@ -253,7 +290,6 @@ export default function FinanceiroTab() {
         </div>
         
         <div className="flex items-center gap-2 print:hidden">
-          {/* BOTÃO DE GERAR PDF / IMPRIMIR (Já Existente) */}
           <button
             onClick={() => window.print()}
             className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
@@ -276,18 +312,45 @@ export default function FinanceiroTab() {
         <p className="text-slate-500">{t.financeiroTab.relatorio} {labelPeriodo}</p>
       </div>
 
-      <div className="bg-white/90 backdrop-blur-sm rounded-[16px] p-1.5 shadow-sm border border-slate-100 flex gap-1 print:hidden">
+      <div className="bg-white/90 backdrop-blur-sm rounded-[16px] p-1.5 shadow-sm border border-slate-100 flex flex-wrap gap-1 print:hidden">
+        {/* BOTÕES PADRÃO */}
         {periodosList.map(({ id, label }) => (
           <button
             key={id}
             onClick={() => setPeriodo(id)}
-            className={`flex-1 py-2.5 rounded-[12px] text-[11px] uppercase tracking-wider font-bold transition-all ${
+            className={`flex-1 min-w-[65px] py-2.5 rounded-[12px] text-[10px] sm:text-[11px] uppercase tracking-wider font-bold transition-all ${
               periodo === id ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
             }`}
           >
             {label}
           </button>
         ))}
+
+        {/* NOVO SELETOR DINÂMICO DE MESES */}
+        <div className="relative flex-1 min-w-[100px]">
+          <select
+            value={periodo === 'mes_especifico' ? mesSelecionado : ''}
+            onChange={(e) => {
+              if (e.target.value) {
+                setMesSelecionado(e.target.value)
+                setPeriodo('mes_especifico')
+              }
+            }}
+            className={`w-full h-full appearance-none py-2.5 pl-3 pr-8 rounded-[12px] text-[10px] sm:text-[11px] uppercase tracking-wider font-bold text-center transition-all cursor-pointer outline-none ${
+              periodo === 'mes_especifico' ? 'bg-slate-800 text-white shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+            }`}
+          >
+            <option value="" disabled selected={periodo !== 'mes_especifico'}>📅 ESCOLHER</option>
+            {ultimosMeses.map(m => (
+              <option key={m.valor} value={m.valor} className="text-slate-800 bg-white">
+                {m.label.toUpperCase()}
+              </option>
+            ))}
+          </select>
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+            <ChevronDown size={14} className={periodo === 'mes_especifico' ? 'text-white' : 'text-slate-400'} />
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -297,7 +360,6 @@ export default function FinanceiroTab() {
       ) : (
         <div className="flex flex-col gap-5">
 
-          {/* CARD DE LUCRO LÍQUIDO E COMISSÃO */}
           <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-[24px] p-6 shadow-xl relative overflow-hidden print:bg-none print:bg-white print:border print:border-slate-200 print:shadow-none print:text-slate-800">
             <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay print:hidden" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/stardust.png")' }} />
             <div className="relative z-10">
@@ -320,7 +382,6 @@ export default function FinanceiroTab() {
                 <span className="text-xs font-medium text-slate-500">{t.financeiroTab.sobreFaturamento}</span>
               </div>
               
-              {/* NOVA LINHA COM A COMISSÃO DE 10% */}
               <div className="mt-4 pt-4 border-t border-slate-700/50 print:border-slate-200 flex justify-between items-center">
                 <span className="text-[11px] font-bold text-pink-400 print:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                   <DollarSign size={14} className="print:hidden" />
@@ -365,7 +426,6 @@ export default function FinanceiroTab() {
             </div>
           </div>
           
-          {/* BOTAO PARA ABRIR O EXTRATO */}
           <button 
             onClick={() => setExtratoAberto(true)}
             className="w-full bg-slate-800 text-white font-bold text-sm py-4 rounded-[20px] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform print:hidden"
@@ -445,7 +505,6 @@ export default function FinanceiroTab() {
               </span>
             </div>
             <div className="bg-white rounded-[20px] p-2 print:p-0 border border-slate-100/50">
-              {/* O AcertoProfessores vai mostrar "Tudo" quando a visão principal for "Ano" */}
               <AcertoProfessores periodo={periodo === 'ano' ? 'tudo' : periodo} />
             </div>
           </div>
@@ -453,7 +512,6 @@ export default function FinanceiroTab() {
         </div>
       )}
       
-      {/* MODAL TELA CHEIA DO EXTRATO DETALHADO */}
       {extratoAberto && (
         <div className="fixed inset-0 z-[100] bg-white flex flex-col animate-in slide-in-from-bottom-full duration-300 print:hidden">
           <div className="pt-10 pb-4 px-6 bg-slate-900 text-white flex items-center justify-between shadow-md">
