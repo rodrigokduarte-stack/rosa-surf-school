@@ -5,8 +5,8 @@ import { supabase } from '@/lib/supabase'
 import { Periodo, formatarValor, parseProfessores, getRange } from '@/lib/dateUtils'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { 
-  TrendingUp, TrendingDown, DollarSign, Clock, Users, BarChart2, 
-  RefreshCw, GraduationCap, Package, Tag, Wallet, Activity, 
+  DollarSign, Clock, Users, BarChart2, 
+  RefreshCw, Wallet, Activity, 
   ArrowUpRight, ArrowDownRight, CreditCard, Landmark, Banknote, HelpCircle, Download, Send,
   List, X, ArrowUpCircle, ArrowDownCircle, ChevronDown
 } from 'lucide-react'
@@ -502,7 +502,7 @@ export default function FinanceiroTab() {
               </span>
             </div>
             <div className="bg-white rounded-[20px] p-2 print:p-0 border border-slate-100/50">
-              <AcertoProfessores periodo={periodo === 'ano' ? 'tudo' : periodo} />
+              <AcertoProfessores periodo={periodo === 'ano' || periodo === 'mes_especifico' ? 'tudo' : periodo} />
             </div>
           </div>
 
