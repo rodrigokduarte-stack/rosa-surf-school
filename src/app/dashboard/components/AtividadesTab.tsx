@@ -34,15 +34,25 @@ export default function AtividadesTab() {
     carregarAtividades()
   }, [carregarAtividades])
 
+  // Função melhorada: Compara os dias reais e formata a data para DD/MM/YY se não for hoje
   function formatarTempoPassado(dataStr: string) {
     const dataAtividade = new Date(dataStr)
     const hoje = new Date()
-    const diffEmMs = hoje.getTime() - dataAtividade.getTime()
-    const diffEmDias = Math.floor(diffEmMs / (1000 * 60 * 60 * 24))
 
-    if (diffEmDias === 0) return t.atividadesTab.hoje
-    if (diffEmDias === 1) return t.atividadesTab.ontem
-    return `${diffEmDias} ${t.atividadesTab.diasAtras}`
+    // Cria strings puras com a data local (ex: '2026-10-06') ignorando as horas
+    const dataAtividadeIso = dataAtividade.toLocaleDateString('en-CA') 
+    const hojeIso = hoje.toLocaleDateString('en-CA')
+
+    if (dataAtividadeIso === hojeIso) {
+      return t.atividadesTab.hoje // Apenas exibe "Hoje" se for exatamente o mesmo dia
+    }
+
+    // Se não for hoje, formata como "06/10/26"
+    return dataAtividade.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit'
+    })
   }
 
   function formatarHora(dataStr: string) {
