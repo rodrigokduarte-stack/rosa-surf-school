@@ -10,10 +10,9 @@ import {
   Plus, Clock, User, DollarSign,
   ChevronDown, ChevronUp, CheckCircle, 
   Package, Trash2, Calendar, X, GraduationCap, 
-  Waves, Grid, List
+  Waves, Grid, List, History, Edit3, Save
 } from 'lucide-react'
 
-// MUDANÇA AQUI: 'Depix' adicionado à lista.
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Depix', 'Outro']
 
 const OPCOES_HORARIOS = Array.from({ length: 27 }, (_, i) => {
@@ -36,7 +35,6 @@ function formatarDataISO(d: Date) {
 export default function AulasTab() {
   const { t, language } = useLanguage() 
 
-  // Dicionários dinâmicos de data para respeitar o Cérebro Tradutor
   const diasDaSemana = {
     pt: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'],
     en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
@@ -70,13 +68,16 @@ export default function AulasTab() {
     return `${nomeDia}, ${dia}/${mes}`
   }
 
-  const [abaVisivel, setAbaVisivel] = useState<'hoje' | 'programadas' | 'calendario'>('hoje')
+  // NOVO ESTADO: 'historico' adicionado às abas
+  const [abaVisivel, setAbaVisivel] = useState<'hoje' | 'programadas' | 'calendario' | 'historico'>('hoje')
   const [aulasHoje, setAulasHoje] = useState<AulaComPagamento[]>([])
   const [aulasProgramadas, setAulasProgramadas] = useState<AulaComPagamento[]>([])
+  const [aulasPassadas, setAulasPassadas] = useState<AulaComPagamento[]>([]) // NOVO ESTADO PARA O HISTÓRICO
   const [loadingAulas, setLoadingAulas] = useState(true)
   const [salvando, setSalvando] = useState(false)
   
   const [modalAberto, setModalAberto] = useState(false)
+  const [aulaEmEdicao, setAulaEmEdicao] = useState<AulaComPagamento | null>(null) // NOVO ESTADO PARA SABER SE ESTÁ EDITANDO
   const [cardExpandido, setCardExpandido] = useState<string | null>(null)
   const [aulaDetalheGrade, setAulaDetalheGrade] = useState<AulaComPagamento | null>(null)
   
@@ -123,10 +124,17 @@ export default function AulasTab() {
   const carregarAulas = useCallback(async () => {
     setLoadingAulas(true)
     const hoje = hojeEmBrasilia()
+    
+    // Busca Aulas de Hoje
     const { data: dataHoje } = await supabase.from('registro_aulas').select('*').eq('data_aula', hoje).eq('excluido', false).order('horario', { ascending: true })
+    // Busca Aulas Futuras
     const { data: dataFuturas } = await supabase.from('registro_aulas').select('*').gt('data_aula', hoje).eq('excluido', false).order('data_aula', { ascending: true }).order('horario', { ascending: true })
+    // Busca Aulas Passadas (Até 60 dias atrás)
+    const { data: dataPassadas } = await supabase.from('registro_aulas').select('*').lt('data_aula', hoje).eq('excluido', false).order('data_aula', { ascending: false }).order('horario', { ascending: false }).limit(200)
+
     setAulasHoje(dataHoje ?? [])
     setAulasProgramadas(dataFuturas ?? [])
+    setAulasPassadas(dataPassadas ?? []) // Carrega o Histórico
     setLoadingAulas(false)
   }, [])
 
@@ -136,6 +144,43 @@ export default function AulasTab() {
   }, [])
 
   useEffect(() => { carregarAulas(); carregarPacotes(); carregarDadosBase(); }, [carregarAulas, carregarPacotes, carregarDadosBase])
+
+  // Função para abrir o modal em modo de EDIÇÃO
+  function abrirEdicao(aula: AulaComPagamento) {
+    setAulaEmEdicao(aula)
+    
+    // Preenche o formulário com os dados da aula
+    setValue('data_aula', aula.data_aula)
+    setValue('horario', aula.horario || '')
+    setValue('nome_cliente', aula.nome_cliente)
+    setValue('modalidade', aula.modalidade as "Aula Particular" | "Aula Grupo")
+    setValue('valor_aula', Number(aula.valor_aula) || 0)
+    setValue('status_pagamento', aula.status_pagamento as "Pago" | "Pendente" | "Parcial")
+    setValue('valor_pago', Number(aula.valor_pago) || 0)
+    setValue('forma_pagamento', aula.forma_pagamento)
+    setValue('observacoes', aula.observacoes || '')
+    
+    // Seta os professores e o pacote
+    setProfessores(Array.isArray(aula.nome_professor) ? aula.nome_professor : aula.nome_professor ? [aula.nome_professor] : [])
+    setPacoteSelecionado(aula.pacote_id || '')
+
+    setModalAberto(true)
+    setCardExpandido(null)
+    setAulaDetalheGrade(null)
+  }
+
+  // Função para abrir o modal de NOVA AULA
+  function abrirNovaAula() {
+    setAulaEmEdicao(null)
+    reset({ 
+      data_aula: hojeEmBrasilia(), horario: '', nome_cliente: '', valor_aula: undefined, 
+      valor_pago: undefined, modalidade: 'Aula Particular', status_pagamento: 'Pendente', 
+      forma_pagamento: undefined, observacoes: '' 
+    })
+    setProfessores([])
+    setPacoteSelecionado('')
+    setModalAberto(true)
+  }
 
   async function excluirAula(aula: AulaComPagamento) {
     if (!window.confirm(`${t.aulas.arquivarConfirmacao} "${aula.nome_cliente}"?`)) return
@@ -152,10 +197,10 @@ export default function AulasTab() {
     if (!error) {
       setAulasHoje(prev => prev.filter(a => a.id !== aula.id))
       setAulasProgramadas(prev => prev.filter(a => a.id !== aula.id))
+      setAulasPassadas(prev => prev.filter(a => a.id !== aula.id))
       setAulaDetalheGrade(null)
       carregarPacotes() 
 
-      // REGISTRO DE HISTÓRICO - EXCLUSÃO DA AULA
       const { data: { user } } = await supabase.auth.getUser()
       await supabase.from('historico_atividades').insert([{
         usuario: user?.email || 'Sistema',
@@ -205,39 +250,56 @@ export default function AulasTab() {
         valor_aula: valorAulaSeguro
       }
       
-      const { error } = await supabase.from('registro_aulas').insert([payload])
-
-      if (error) {
-        alert(t.aulas.erroBanco + error.message)
-        setSalvando(false)
-        return 
-      }
-
-      if (pacoteSelecionado) {
-        const pacote = pacotes.find(p => p.id === pacoteSelecionado)
-        if (pacote && pacote.aulas_restantes > 0) {
-          const novasRestantes = pacote.aulas_restantes - 1
-          await supabase.from('pacotes').update({ aulas_restantes: novasRestantes, status: novasRestantes === 0 ? 'Finalizado' : 'Ativo' }).eq('id', pacoteSelecionado)
-          carregarPacotes()
+      // MODO EDIÇÃO
+      if (aulaEmEdicao) {
+        // Lógica para devolver/retirar aula do pacote se o pacote mudou
+        if (aulaEmEdicao.pacote_id !== pacoteSelecionado) {
+          if (aulaEmEdicao.pacote_id) {
+             const pacoteAntigo = pacotes.find(p => p.id === aulaEmEdicao.pacote_id)
+             if (pacoteAntigo) await supabase.from('pacotes').update({ aulas_restantes: pacoteAntigo.aulas_restantes + 1, status: 'Ativo' }).eq('id', aulaEmEdicao.pacote_id)
+          }
+          if (pacoteSelecionado) {
+             const pacoteNovo = pacotes.find(p => p.id === pacoteSelecionado)
+             if (pacoteNovo && pacoteNovo.aulas_restantes > 0) await supabase.from('pacotes').update({ aulas_restantes: pacoteNovo.aulas_restantes - 1, status: (pacoteNovo.aulas_restantes - 1) === 0 ? 'Finalizado' : 'Ativo' }).eq('id', pacoteSelecionado)
+          }
         }
-      }
 
-      // REGISTRO DE HISTÓRICO - NOVA AULA
-      const { data: { user } } = await supabase.auth.getUser()
-      await supabase.from('historico_atividades').insert([{
-        usuario: user?.email || 'Sistema',
-        acao: 'Nova Aula',
-        detalhes: `Agendou aula para ${nomeDigitado} no dia ${dados.data_aula.split('-').reverse().join('/')}.`
-      }])
+        const { error } = await supabase.from('registro_aulas').update(payload).eq('id', aulaEmEdicao.id)
+        if (error) throw error
+
+        const { data: { user } } = await supabase.auth.getUser()
+        await supabase.from('historico_atividades').insert([{
+          usuario: user?.email || 'Sistema',
+          acao: 'Aula Editada',
+          detalhes: `Editou detalhes da aula de ${nomeDigitado} do dia ${dados.data_aula.split('-').reverse().join('/')}.`
+        }])
+
+      } else {
+        // MODO CRIAÇÃO (CÓDIGO ORIGINAL)
+        const { error } = await supabase.from('registro_aulas').insert([payload])
+        if (error) throw error
+
+        if (pacoteSelecionado) {
+          const pacote = pacotes.find(p => p.id === pacoteSelecionado)
+          if (pacote && pacote.aulas_restantes > 0) {
+            const novasRestantes = pacote.aulas_restantes - 1
+            await supabase.from('pacotes').update({ aulas_restantes: novasRestantes, status: novasRestantes === 0 ? 'Finalizado' : 'Ativo' }).eq('id', pacoteSelecionado)
+          }
+        }
+
+        const { data: { user } } = await supabase.auth.getUser()
+        await supabase.from('historico_atividades').insert([{
+          usuario: user?.email || 'Sistema',
+          acao: 'Nova Aula',
+          detalhes: `Agendou aula para ${nomeDigitado} no dia ${dados.data_aula.split('-').reverse().join('/')}.`
+        }])
+      }
 
       setSalvando(false)
-      reset({ 
-        data_aula: hojeEmBrasilia(), horario: '', nome_cliente: '', valor_aula: undefined, 
-        valor_pago: undefined, modalidade: 'Aula Particular', status_pagamento: 'Pendente', 
-        forma_pagamento: undefined, observacoes: '' 
-      })
-      setProfessores([]); setPacoteSelecionado(''); carregarAulas()
-      setModalAberto(false) 
+      setModalAberto(false)
+      setAulaEmEdicao(null)
+      carregarAulas()
+      carregarPacotes()
 
     } catch (err) {
       alert(t.aulas.erroInesperado)
@@ -261,6 +323,12 @@ export default function AulasTab() {
 
   const temPacote = !!pacoteSelecionado
   const aulasAgrupadas = aulasProgramadas.reduce((acc, aula) => {
+    if (!acc[aula.data_aula]) acc[aula.data_aula] = []
+    acc[aula.data_aula].push(aula)
+    return acc
+  }, {} as Record<string, AulaComPagamento[]>)
+
+  const aulasPassadasAgrupadas = aulasPassadas.reduce((acc, aula) => {
     if (!acc[aula.data_aula]) acc[aula.data_aula] = []
     acc[aula.data_aula].push(aula)
     return acc
@@ -361,19 +429,24 @@ export default function AulasTab() {
               </div>
             )}
             
-            <div className="bg-slate-50 rounded-xl p-3 mb-4 space-y-2">
-              <div className="flex justify-between text-sm">
+            <div className="bg-slate-50 rounded-xl p-3 mb-4 space-y-2 relative">
+              {/* BOTÃO DE EDITAR AULA INTEIRA (VALOR, STATUS, DATA) */}
+              <button onClick={() => abrirEdicao(aula)} className="absolute top-2 right-2 p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-pink-600 hover:border-pink-200 shadow-sm transition-colors" title="Editar Aula Completa">
+                <Edit3 size={14} />
+              </button>
+              
+              <div className="flex justify-between text-sm pr-10">
                 <span className="text-slate-500 font-medium">{t.aulas.valorTotal}:</span>
                 <span className="font-bold text-slate-800">{formatarValor(Number(aula.valor_aula))}</span>
               </div>
               {aula.status_pagamento === 'Parcial' && (
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-sm pr-10">
                   <span className="text-slate-500 font-medium">{t.aulas.faltaPagar}</span>
                   <span className="font-bold text-amber-600">{formatarValor(Number(aula.valor_aula) - Number(aula.valor_pago || 0))}</span>
                 </div>
               )}
               {aula.forma_pagamento && (
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-sm pr-10">
                   <span className="text-slate-500 font-medium">{t.aulas.forma}</span>
                   <span className="font-bold text-slate-600">{aula.forma_pagamento}</span>
                 </div>
@@ -414,14 +487,18 @@ export default function AulasTab() {
           </div>
         </div>
 
-        <div className="flex bg-slate-200/50 p-1.5 rounded-[16px]">
-          <button onClick={() => setAbaVisivel('hoje')} className={`flex-1 py-2.5 rounded-[12px] text-[13px] font-bold flex items-center justify-center gap-1.5 transition-all ${abaVisivel === 'hoje' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><Waves size={14} /> {t.aulas.hoje}</button>
-          <button onClick={() => setAbaVisivel('programadas')} className={`flex-1 py-2.5 rounded-[12px] text-[13px] font-bold flex items-center justify-center gap-1.5 transition-all ${abaVisivel === 'programadas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><List size={14} /> {t.aulas.programadas}</button>
-          <button onClick={() => setAbaVisivel('calendario')} className={`flex-1 py-2.5 rounded-[12px] text-[13px] font-bold flex items-center justify-center gap-1.5 transition-all ${abaVisivel === 'calendario' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><Grid size={14} /> {t.aulas.calendario}</button>
+        {/* MUDANÇA: Aba "Histórico" Adicionada */}
+        <div className="flex flex-wrap gap-1.5 bg-slate-200/50 p-1.5 rounded-[16px]">
+          <button onClick={() => setAbaVisivel('hoje')} className={`flex-1 min-w-[70px] py-2.5 rounded-[12px] text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all ${abaVisivel === 'hoje' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><Waves size={16} /> HOJE</button>
+          <button onClick={() => setAbaVisivel('programadas')} className={`flex-1 min-w-[70px] py-2.5 rounded-[12px] text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all ${abaVisivel === 'programadas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><List size={16} /> FUTURO</button>
+          <button onClick={() => setAbaVisivel('historico')} className={`flex-1 min-w-[70px] py-2.5 rounded-[12px] text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all ${abaVisivel === 'historico' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><History size={16} /> PASSADO</button>
+          <button onClick={() => setAbaVisivel('calendario')} className={`flex-1 min-w-[70px] py-2.5 rounded-[12px] text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all ${abaVisivel === 'calendario' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><Grid size={16} /> GRADE</button>
         </div>
 
         <div>
-          {loadingAulas ? <div className="flex justify-center py-10"><div className="w-7 h-7 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" /></div> : abaVisivel === 'calendario' ? (
+          {loadingAulas ? <div className="flex justify-center py-10"><div className="w-7 h-7 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" /></div> : 
+          
+          abaVisivel === 'calendario' ? (
             HORARIOS_VISIVEIS.length === 0 ? (
               <div className="bg-white rounded-[24px] p-10 text-center border border-slate-100 text-slate-400 text-sm font-medium shadow-sm">{t.aulas.semAulasSemana}</div>
             ) : (
@@ -465,21 +542,23 @@ export default function AulasTab() {
             )
           ) : abaVisivel === 'hoje' ? (
             aulasHoje.length === 0 ? <div className="bg-white rounded-[24px] p-8 text-center border border-slate-100 text-slate-400 text-sm font-medium shadow-sm">{t.aulas.nenhumaHoje}</div> : <div className="flex flex-col gap-4 pb-24">{aulasHoje.map(renderCard)}</div>
+          ) : abaVisivel === 'historico' ? ( // NOVO CORPO DO HISTÓRICO
+            aulasPassadas.length === 0 ? <div className="bg-white rounded-[24px] p-8 text-center border border-slate-100 text-slate-400 text-sm font-medium shadow-sm">Nenhuma aula registrada no passado.</div> : <div className="flex flex-col gap-6 pb-24">{Object.entries(aulasPassadasAgrupadas).map(([dataStr, aulasDoDia]) => (<div key={dataStr}><h3 className="text-[13px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-3 ml-2"><span className="w-1.5 h-1.5 rounded-full bg-slate-300" />{formatarDataHeader(dataStr)}</h3><div className="flex flex-col gap-4">{aulasDoDia.map(renderCard)}</div></div>))}</div>
           ) : (
             aulasProgramadas.length === 0 ? <div className="bg-white rounded-[24px] p-8 text-center border border-slate-100 text-slate-400 text-sm font-medium shadow-sm">{t.aulas.semAulasFuturas}</div> : <div className="flex flex-col gap-6 pb-24">{Object.entries(aulasAgrupadas).map(([dataStr, aulasDoDia]) => (<div key={dataStr}><h3 className="text-[13px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-3 ml-2"><span className="w-1.5 h-1.5 rounded-full bg-slate-300" />{formatarDataHeader(dataStr)}</h3><div className="flex flex-col gap-4">{aulasDoDia.map(renderCard)}</div></div>))}</div>
           )}
         </div>
       </div>
 
-      <button onClick={() => setModalAberto(true)} className="fixed bottom-[88px] right-5 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-[0_4px_20px_rgba(232,67,106,0.45)] flex items-center justify-center z-40 hover:scale-105 active:scale-95 transition-all"><Plus size={28} strokeWidth={2.5} /></button>
+      <button onClick={abrirNovaAula} className="fixed bottom-[88px] right-5 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-[0_4px_20px_rgba(232,67,106,0.45)] flex items-center justify-center z-40 hover:scale-105 active:scale-95 transition-all"><Plus size={28} strokeWidth={2.5} /></button>
 
-      {/* MODAL DE ADICIONAR AULA */}
+      {/* MODAL DE ADICIONAR / EDITAR AULA */}
       {modalAberto && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setModalAberto(false)} />
           <div className="relative bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 pb-40 max-h-[90vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom-full duration-300" style={{ transform: `translateY(${dragOffset}px)` }}>
             <div className="w-full pb-6 pt-2 -mt-4 flex justify-center cursor-grab active:cursor-grabbing" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}><div className="w-12 h-1.5 bg-slate-200 rounded-full" /></div>
-            <div className="flex items-center justify-between mb-6"><div><h3 className="text-xl font-black text-slate-800">{t.aulas.novaAula}</h3><p className="text-sm text-slate-500 mt-0.5">{t.aulas.preenchaDados}</p></div><button onClick={() => setModalAberto(false)} className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"><X size={18} /></button></div>
+            <div className="flex items-center justify-between mb-6"><div><h3 className="text-xl font-black text-slate-800">{aulaEmEdicao ? 'Editar Aula' : t.aulas.novaAula}</h3><p className="text-sm text-slate-500 mt-0.5">{aulaEmEdicao ? 'Corrija os dados abaixo.' : t.aulas.preenchaDados}</p></div><button onClick={() => setModalAberto(false)} className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"><X size={18} /></button></div>
             
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
               <div className="grid grid-cols-2 gap-4">
@@ -525,8 +604,8 @@ export default function AulasTab() {
               <div><label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">{t.aulas.notas}</label><textarea rows={2} placeholder="Ex: Prancha Longboard..." {...register('observacoes')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 resize-none" /></div>
 
               <button type="submit" disabled={salvando} className="w-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-black py-5 rounded-xl text-lg mt-4 shadow-[0_4px_14px_rgba(232,67,106,0.4)] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2">
-                {salvando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={20} />}
-                {salvando ? t.aulas.adicionando : t.aulas.adicionarAula}
+                {salvando ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : aulaEmEdicao ? <Save size={20} /> : <Plus size={20} />}
+                {salvando ? (aulaEmEdicao ? 'Salvando...' : t.aulas.adicionando) : (aulaEmEdicao ? 'Salvar Edição' : t.aulas.adicionarAula)}
               </button>
             </form>
           </div>
