@@ -46,7 +46,7 @@ const ICONES_PAGAMENTO: Record<string, any> = {
   'Outro': HelpCircle,
 }
 
-type PeriodoFiltro = Periodo | 'ano' | 'mes_especifico'
+type PeriodoFiltro = Periodo | 'ano' | 'mes_especifico' | 'ano_especifico'
 
 function gerarUltimosMeses(qtd = 24) {
   const meses = []
@@ -61,12 +61,23 @@ function gerarUltimosMeses(qtd = 24) {
   return meses
 }
 
+function gerarUltimosAnos(qtd = 5) {
+  const anos = []
+  const anoAtual = new Date().getFullYear()
+  for (let i = 0; i < qtd; i++) {
+    anos.push({ valor: `${anoAtual - i}`, label: `${anoAtual - i}` })
+  }
+  return anos
+}
+
 const ultimosMeses = gerarUltimosMeses(24)
+const ultimosAnos = gerarUltimosAnos(5)
 
 export default function FinanceiroTab() {
   const { t, language } = useLanguage() 
   const [periodo, setPeriodo] = useState<PeriodoFiltro>('tudo')
   const [mesSelecionado, setMesSelecionado] = useState<string>('')
+  const [anoSelecionado, setAnoSelecionado] = useState<string>('')
   const [dados, setDados] = useState<DadosFinanceiros>(DADOS_VAZIOS)
   const [breakdownCategorias, setBreakdownCategorias] = useState<Record<string, number>>({})
   const [breakdownPagamentos, setBreakdownPagamentos] = useState<Record<string, number>>({})
@@ -92,6 +103,9 @@ export default function FinanceiroTab() {
     { id: 'ano', label: labelAno },
     { id: 'tudo', label: t.financeiroTab.periodoTudo },
   ]
+
+  const isMes = periodo === 'mes' || periodo === 'mes_especifico'
+  const isAno = periodo === 'ano' || periodo === 'ano_especifico'
 
   async function fetchDados(p: PeriodoFiltro) {
     setLoading(true)
@@ -121,6 +135,15 @@ export default function FinanceiroTab() {
         
         inicio = `${y}-${m}-01`
         fim = `${y}-${m}-${d}`
+      } else {
+        inicio = null
+        fim = null
+      }
+    } else if (p === 'ano_especifico') {
+      if (anoSelecionado) {
+        const ano = parseInt(anoSelecionado)
+        inicio = `${ano}-01-01`
+        fim = `${ano}-12-31`
       } else {
         inicio = null
         fim = null
@@ -257,7 +280,7 @@ export default function FinanceiroTab() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchDados(periodo) }, [periodo, mesSelecionado, t])
+  useEffect(() => { fetchDados(periodo) }, [periodo, mesSelecionado, anoSelecionado, t])
 
   const lucroLiquido = dados.faturamentoBruto - dados.custoProfessores - dados.custosOperacionais
   
@@ -267,6 +290,8 @@ export default function FinanceiroTab() {
   if (periodo === 'mes_especifico') {
     const obj = ultimosMeses.find(m => m.valor === mesSelecionado)
     labelPeriodo = obj ? obj.label.toUpperCase() : 'MÊS ESPECÍFICO'
+  } else if (periodo === 'ano_especifico') {
+    labelPeriodo = anoSelecionado ? `ANO ${anoSelecionado}` : 'ANO ESPECÍFICO'
   }
 
   const margem = dados.faturamentoBruto > 0 ? Math.round((lucroLiquido / dados.faturamentoBruto) * 100) : 0
@@ -274,7 +299,7 @@ export default function FinanceiroTab() {
   const tituloPagamento = 
     periodo === 'hoje' ? t.financeiroTab.quemPagarHoje :
     periodo === 'semana' ? t.financeiroTab.quemPagarSemana :
-    (periodo === 'mes' || periodo === 'mes_especifico') ? t.financeiroTab.quemPagarMes :
+    (isMes) ? t.financeiroTab.quemPagarMes :
     t.financeiroTab.historicoPagamentos
 
   return (
@@ -317,37 +342,54 @@ export default function FinanceiroTab() {
             key={id}
             onClick={() => setPeriodo(id)}
             className={`flex-1 min-w-[65px] py-2.5 rounded-[12px] text-[10px] sm:text-[11px] uppercase tracking-wider font-bold transition-all ${
-              periodo === id ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+              (periodo === id || (id === 'mes' && periodo === 'mes_especifico') || (id === 'ano' && periodo === 'ano_especifico')) ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
             }`}
           >
             {label}
           </button>
         ))}
 
-        <div className="relative flex-1 min-w-[100px]">
-          <select
-            value={periodo === 'mes_especifico' ? mesSelecionado : ''}
-            onChange={(e) => {
-              if (e.target.value) {
-                setMesSelecionado(e.target.value)
-                setPeriodo('mes_especifico')
+        {/* SELETOR DINÂMICO DE MÊS OU ANO */}
+        {(isMes || isAno) && (
+          <div className="relative basis-full mt-1">
+            <select
+              value={
+                periodo === 'mes_especifico' ? mesSelecionado : 
+                periodo === 'ano_especifico' ? anoSelecionado : 
+                ''
               }
-            }}
-            className={`w-full h-full appearance-none py-2.5 pl-3 pr-8 rounded-[12px] text-[10px] sm:text-[11px] uppercase tracking-wider font-bold text-center transition-all cursor-pointer outline-none ${
-              periodo === 'mes_especifico' ? 'bg-slate-800 text-white shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-            }`}
-          >
-            <option value="" disabled>📅 ESCOLHER</option>
-            {ultimosMeses.map(m => (
-              <option key={m.valor} value={m.valor} className="text-slate-800 bg-white">
-                {m.label.toUpperCase()}
-              </option>
-            ))}
-          </select>
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-            <ChevronDown size={14} className={periodo === 'mes_especifico' ? 'text-white' : 'text-slate-400'} />
+              onChange={(e) => {
+                if (e.target.value) {
+                  if (isMes) {
+                    setMesSelecionado(e.target.value)
+                    setPeriodo('mes_especifico')
+                  } else {
+                    setAnoSelecionado(e.target.value)
+                    setPeriodo('ano_especifico')
+                  }
+                }
+              }}
+              className={`w-full appearance-none py-2.5 pl-3 pr-8 rounded-[12px] text-[10px] sm:text-[11px] uppercase tracking-wider font-bold text-center transition-all cursor-pointer outline-none ${
+                (periodo === 'mes_especifico' || periodo === 'ano_especifico') ? 'bg-slate-800 text-white shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+              }`}
+            >
+              <option value="" disabled>📅 ESCOLHER {isMes ? 'MÊS' : 'ANO'}</option>
+              {isMes && ultimosMeses.map(m => (
+                <option key={m.valor} value={m.valor} className="text-slate-800 bg-white">
+                  {m.label.toUpperCase()}
+                </option>
+              ))}
+              {isAno && ultimosAnos.map(a => (
+                <option key={a.valor} value={a.valor} className="text-slate-800 bg-white">
+                  {a.label}
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+              <ChevronDown size={14} className={(periodo === 'mes_especifico' || periodo === 'ano_especifico') ? 'text-white' : 'text-slate-400'} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {loading ? (
@@ -502,7 +544,7 @@ export default function FinanceiroTab() {
               </span>
             </div>
             <div className="bg-white rounded-[20px] p-2 print:p-0 border border-slate-100/50">
-              <AcertoProfessores periodo={periodo === 'ano' || periodo === 'mes_especifico' ? 'tudo' : periodo} />
+              <AcertoProfessores periodo={isAno ? 'tudo' : periodo} />
             </div>
           </div>
 
