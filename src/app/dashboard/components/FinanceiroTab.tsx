@@ -349,7 +349,6 @@ export default function FinanceiroTab() {
           </button>
         ))}
 
-        {/* SELETOR DINÂMICO DE MÊS OU ANO */}
         {(isMes || isAno) && (
           <div className="relative basis-full mt-1">
             <select
@@ -544,7 +543,7 @@ export default function FinanceiroTab() {
               </span>
             </div>
             <div className="bg-white rounded-[20px] p-2 print:p-0 border border-slate-100/50">
-              <AcertoProfessores periodo={isAno ? 'tudo' : periodo} />
+              <AcertoProfessores periodo={['ano', 'ano_especifico', 'mes_especifico'].includes(periodo) ? 'tudo' : (periodo as any)} />
             </div>
           </div>
 
