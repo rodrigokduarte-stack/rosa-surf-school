@@ -228,6 +228,10 @@ export default function FinanceiroTab() {
   useEffect(() => { fetchDados(periodo) }, [periodo, t])
 
   const lucroLiquido = dados.faturamentoBruto - dados.custoProfessores - dados.custosOperacionais
+  
+  // NOVO CÁLCULO DA COMISSÃO DE 10%
+  const comissao = lucroLiquido > 0 ? lucroLiquido * 0.10 : 0
+  
   const labelPeriodo = periodosList.find(p => p.id === periodo)?.label ?? ''
   const margem = dados.faturamentoBruto > 0 ? Math.round((lucroLiquido / dados.faturamentoBruto) * 100) : 0
 
@@ -249,6 +253,7 @@ export default function FinanceiroTab() {
         </div>
         
         <div className="flex items-center gap-2 print:hidden">
+          {/* BOTÃO DE GERAR PDF / IMPRIMIR (Já Existente) */}
           <button
             onClick={() => window.print()}
             className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
@@ -292,6 +297,7 @@ export default function FinanceiroTab() {
       ) : (
         <div className="flex flex-col gap-5">
 
+          {/* CARD DE LUCRO LÍQUIDO E COMISSÃO */}
           <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-[24px] p-6 shadow-xl relative overflow-hidden print:bg-none print:bg-white print:border print:border-slate-200 print:shadow-none print:text-slate-800">
             <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay print:hidden" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/stardust.png")' }} />
             <div className="relative z-10">
@@ -313,6 +319,18 @@ export default function FinanceiroTab() {
                 </div>
                 <span className="text-xs font-medium text-slate-500">{t.financeiroTab.sobreFaturamento}</span>
               </div>
+              
+              {/* NOVA LINHA COM A COMISSÃO DE 10% */}
+              <div className="mt-4 pt-4 border-t border-slate-700/50 print:border-slate-200 flex justify-between items-center">
+                <span className="text-[11px] font-bold text-pink-400 print:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <DollarSign size={14} className="print:hidden" />
+                  Comissão Gerencial (10%)
+                </span>
+                <span className="text-lg font-black text-white print:text-slate-800">
+                  {formatarValor(comissao)}
+                </span>
+              </div>
+
             </div>
           </div>
 
