@@ -46,10 +46,8 @@ const ICONES_PAGAMENTO: Record<string, any> = {
   'Outro': HelpCircle,
 }
 
-// ADICIONADO: 'mes_especifico' aos tipos de filtro
 type PeriodoFiltro = Periodo | 'ano' | 'mes_especifico'
 
-// FUNÇÃO PARA GERAR OS ÚLTIMOS 24 MESES
 function gerarUltimosMeses(qtd = 24) {
   const meses = []
   const hoje = new Date()
@@ -68,7 +66,7 @@ const ultimosMeses = gerarUltimosMeses(24)
 export default function FinanceiroTab() {
   const { t, language } = useLanguage() 
   const [periodo, setPeriodo] = useState<PeriodoFiltro>('tudo')
-  const [mesSelecionado, setMesSelecionado] = useState<string>('') // Guarda o mês escolhido no Dropdown
+  const [mesSelecionado, setMesSelecionado] = useState<string>('')
   const [dados, setDados] = useState<DadosFinanceiros>(DADOS_VAZIOS)
   const [breakdownCategorias, setBreakdownCategorias] = useState<Record<string, number>>({})
   const [breakdownPagamentos, setBreakdownPagamentos] = useState<Record<string, number>>({})
@@ -108,23 +106,27 @@ export default function FinanceiroTab() {
       const d = String(agora.getDate()).padStart(2, '0')
       inicio = `${a}-01-01`
       fim = `${a}-${m}-${d}`
-    } else if (p === 'mes_especifico' && mesSelecionado) {
-      // Lógica para pegar exatamente do dia 1 ao último dia do mês que você escolheu no dropdown
-      const [anoStr, mesStr] = mesSelecionado.split('-')
-      const ano = parseInt(anoStr)
-      const mes = parseInt(mesStr) 
+    } else if (p === 'mes_especifico') {
+      if (mesSelecionado) {
+        const [anoStr, mesStr] = mesSelecionado.split('-')
+        const ano = parseInt(anoStr)
+        const mes = parseInt(mesStr) 
 
-      const primeiroDia = new Date(ano, mes - 1, 1)
-      const ultimoDia = new Date(ano, mes, 0)
-      
-      const y = primeiroDia.getFullYear()
-      const m = String(primeiroDia.getMonth() + 1).padStart(2, '0')
-      const d = String(ultimoDia.getDate()).padStart(2, '0')
-      
-      inicio = `${y}-${m}-01`
-      fim = `${y}-${m}-${d}`
+        const primeiroDia = new Date(ano, mes - 1, 1)
+        const ultimoDia = new Date(ano, mes, 0)
+        
+        const y = primeiroDia.getFullYear()
+        const m = String(primeiroDia.getMonth() + 1).padStart(2, '0')
+        const d = String(ultimoDia.getDate()).padStart(2, '0')
+        
+        inicio = `${y}-${m}-01`
+        fim = `${y}-${m}-${d}`
+      } else {
+        inicio = null
+        fim = null
+      }
     } else {
-      const range = getRange(p)
+      const range = getRange(p as Periodo)
       inicio = range.inicio
       fim = range.fim
     }
@@ -255,15 +257,12 @@ export default function FinanceiroTab() {
     setLoading(false)
   }
 
-  // Aciona a busca toda vez que o período ou o mês específico mudar
   useEffect(() => { fetchDados(periodo) }, [periodo, mesSelecionado, t])
 
   const lucroLiquido = dados.faturamentoBruto - dados.custoProfessores - dados.custosOperacionais
   
-  // CÁLCULO DA COMISSÃO DE 10%
   const comissao = lucroLiquido > 0 ? lucroLiquido * 0.10 : 0
   
-  // NOME BONITO PARA O PDF DEPENDENDO DO FILTRO
   let labelPeriodo = periodosList.find(p => p.id === periodo)?.label ?? ''
   if (periodo === 'mes_especifico') {
     const obj = ultimosMeses.find(m => m.valor === mesSelecionado)
@@ -313,7 +312,6 @@ export default function FinanceiroTab() {
       </div>
 
       <div className="bg-white/90 backdrop-blur-sm rounded-[16px] p-1.5 shadow-sm border border-slate-100 flex flex-wrap gap-1 print:hidden">
-        {/* BOTÕES PADRÃO */}
         {periodosList.map(({ id, label }) => (
           <button
             key={id}
@@ -326,7 +324,6 @@ export default function FinanceiroTab() {
           </button>
         ))}
 
-        {/* NOVO SELETOR DINÂMICO DE MESES */}
         <div className="relative flex-1 min-w-[100px]">
           <select
             value={periodo === 'mes_especifico' ? mesSelecionado : ''}
@@ -340,7 +337,7 @@ export default function FinanceiroTab() {
               periodo === 'mes_especifico' ? 'bg-slate-800 text-white shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100'
             }`}
           >
-            <option value="" disabled selected={periodo !== 'mes_especifico'}>📅 ESCOLHER</option>
+            <option value="" disabled>📅 ESCOLHER</option>
             {ultimosMeses.map(m => (
               <option key={m.valor} value={m.valor} className="text-slate-800 bg-white">
                 {m.label.toUpperCase()}
