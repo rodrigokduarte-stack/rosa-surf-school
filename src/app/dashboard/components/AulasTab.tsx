@@ -68,16 +68,15 @@ export default function AulasTab() {
     return `${nomeDia}, ${dia}/${mes}`
   }
 
-  // NOVO ESTADO: 'historico' adicionado às abas
   const [abaVisivel, setAbaVisivel] = useState<'hoje' | 'programadas' | 'calendario' | 'historico'>('hoje')
   const [aulasHoje, setAulasHoje] = useState<AulaComPagamento[]>([])
   const [aulasProgramadas, setAulasProgramadas] = useState<AulaComPagamento[]>([])
-  const [aulasPassadas, setAulasPassadas] = useState<AulaComPagamento[]>([]) // NOVO ESTADO PARA O HISTÓRICO
+  const [aulasPassadas, setAulasPassadas] = useState<AulaComPagamento[]>([])
   const [loadingAulas, setLoadingAulas] = useState(true)
   const [salvando, setSalvando] = useState(false)
   
   const [modalAberto, setModalAberto] = useState(false)
-  const [aulaEmEdicao, setAulaEmEdicao] = useState<AulaComPagamento | null>(null) // NOVO ESTADO PARA SABER SE ESTÁ EDITANDO
+  const [aulaEmEdicao, setAulaEmEdicao] = useState<AulaComPagamento | null>(null)
   const [cardExpandido, setCardExpandido] = useState<string | null>(null)
   const [aulaDetalheGrade, setAulaDetalheGrade] = useState<AulaComPagamento | null>(null)
   
@@ -125,16 +124,13 @@ export default function AulasTab() {
     setLoadingAulas(true)
     const hoje = hojeEmBrasilia()
     
-    // Busca Aulas de Hoje
     const { data: dataHoje } = await supabase.from('registro_aulas').select('*').eq('data_aula', hoje).eq('excluido', false).order('horario', { ascending: true })
-    // Busca Aulas Futuras
     const { data: dataFuturas } = await supabase.from('registro_aulas').select('*').gt('data_aula', hoje).eq('excluido', false).order('data_aula', { ascending: true }).order('horario', { ascending: true })
-    // Busca Aulas Passadas (Até 60 dias atrás)
-    const { data: dataPassadas } = await supabase.from('registro_aulas').select('*').lt('data_aula', hoje).eq('excluido', false).order('data_aula', { ascending: false }).order('horario', { ascending: false }).limit(200)
+    const { data: dataPassadas } = await supabase.from('registro_aulas').select('*').lt('data_aula', hoje).eq('excluido', false).order('data_aula', { ascending: false }).order('horario', { ascending: false }).limit(150)
 
     setAulasHoje(dataHoje ?? [])
     setAulasProgramadas(dataFuturas ?? [])
-    setAulasPassadas(dataPassadas ?? []) // Carrega o Histórico
+    setAulasPassadas(dataPassadas ?? [])
     setLoadingAulas(false)
   }, [])
 
@@ -145,11 +141,8 @@ export default function AulasTab() {
 
   useEffect(() => { carregarAulas(); carregarPacotes(); carregarDadosBase(); }, [carregarAulas, carregarPacotes, carregarDadosBase])
 
-  // Função para abrir o modal em modo de EDIÇÃO
   function abrirEdicao(aula: AulaComPagamento) {
     setAulaEmEdicao(aula)
-    
-    // Preenche o formulário com os dados da aula
     setValue('data_aula', aula.data_aula)
     setValue('horario', aula.horario || '')
     setValue('nome_cliente', aula.nome_cliente)
@@ -160,7 +153,6 @@ export default function AulasTab() {
     setValue('forma_pagamento', aula.forma_pagamento)
     setValue('observacoes', aula.observacoes || '')
     
-    // Seta os professores e o pacote
     setProfessores(Array.isArray(aula.nome_professor) ? aula.nome_professor : aula.nome_professor ? [aula.nome_professor] : [])
     setPacoteSelecionado(aula.pacote_id || '')
 
@@ -169,7 +161,6 @@ export default function AulasTab() {
     setAulaDetalheGrade(null)
   }
 
-  // Função para abrir o modal de NOVA AULA
   function abrirNovaAula() {
     setAulaEmEdicao(null)
     reset({ 
@@ -250,9 +241,7 @@ export default function AulasTab() {
         valor_aula: valorAulaSeguro
       }
       
-      // MODO EDIÇÃO
       if (aulaEmEdicao) {
-        // Lógica para devolver/retirar aula do pacote se o pacote mudou
         if (aulaEmEdicao.pacote_id !== pacoteSelecionado) {
           if (aulaEmEdicao.pacote_id) {
              const pacoteAntigo = pacotes.find(p => p.id === aulaEmEdicao.pacote_id)
@@ -275,7 +264,6 @@ export default function AulasTab() {
         }])
 
       } else {
-        // MODO CRIAÇÃO (CÓDIGO ORIGINAL)
         const { error } = await supabase.from('registro_aulas').insert([payload])
         if (error) throw error
 
@@ -430,7 +418,6 @@ export default function AulasTab() {
             )}
             
             <div className="bg-slate-50 rounded-xl p-3 mb-4 space-y-2 relative">
-              {/* BOTÃO DE EDITAR AULA INTEIRA (VALOR, STATUS, DATA) */}
               <button onClick={() => abrirEdicao(aula)} className="absolute top-2 right-2 p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-pink-600 hover:border-pink-200 shadow-sm transition-colors" title="Editar Aula Completa">
                 <Edit3 size={14} />
               </button>
@@ -487,12 +474,19 @@ export default function AulasTab() {
           </div>
         </div>
 
-        {/* MUDANÇA: Aba "Histórico" Adicionada */}
-        <div className="flex flex-wrap gap-1.5 bg-slate-200/50 p-1.5 rounded-[16px]">
-          <button onClick={() => setAbaVisivel('hoje')} className={`flex-1 min-w-[70px] py-2.5 rounded-[12px] text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all ${abaVisivel === 'hoje' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><Waves size={16} /> HOJE</button>
-          <button onClick={() => setAbaVisivel('programadas')} className={`flex-1 min-w-[70px] py-2.5 rounded-[12px] text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all ${abaVisivel === 'programadas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><List size={16} /> FUTURO</button>
-          <button onClick={() => setAbaVisivel('historico')} className={`flex-1 min-w-[70px] py-2.5 rounded-[12px] text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all ${abaVisivel === 'historico' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><History size={16} /> PASSADO</button>
-          <button onClick={() => setAbaVisivel('calendario')} className={`flex-1 min-w-[70px] py-2.5 rounded-[12px] text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all ${abaVisivel === 'calendario' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><Grid size={16} /> GRADE</button>
+        {/* BARRINHA DE BOTÕES RESTAURADA COM O ÍCONE DE HISTÓRICO */}
+        <div className="flex gap-1 bg-slate-200/50 p-1.5 rounded-[16px]">
+          <button onClick={() => setAbaVisivel('hoje')} className={`flex-1 py-2.5 rounded-[12px] text-[12px] sm:text-[13px] font-bold flex items-center justify-center gap-1.5 transition-all ${abaVisivel === 'hoje' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><Waves size={14} /> {t.aulas.hoje}</button>
+          <button onClick={() => setAbaVisivel('programadas')} className={`flex-1 py-2.5 rounded-[12px] text-[12px] sm:text-[13px] font-bold flex items-center justify-center gap-1.5 transition-all ${abaVisivel === 'programadas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><List size={14} /> {t.aulas.programadas}</button>
+          <button onClick={() => setAbaVisivel('calendario')} className={`flex-1 py-2.5 rounded-[12px] text-[12px] sm:text-[13px] font-bold flex items-center justify-center gap-1.5 transition-all ${abaVisivel === 'calendario' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}><Grid size={14} /> {t.aulas.calendario}</button>
+          
+          <button 
+            onClick={() => setAbaVisivel('historico')} 
+            title="Aulas Passadas"
+            className={`w-11 sm:w-12 flex-shrink-0 flex items-center justify-center rounded-[12px] transition-all ${abaVisivel === 'historico' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:bg-slate-300/50'}`}
+          >
+            <History size={18} />
+          </button>
         </div>
 
         <div>
@@ -542,7 +536,7 @@ export default function AulasTab() {
             )
           ) : abaVisivel === 'hoje' ? (
             aulasHoje.length === 0 ? <div className="bg-white rounded-[24px] p-8 text-center border border-slate-100 text-slate-400 text-sm font-medium shadow-sm">{t.aulas.nenhumaHoje}</div> : <div className="flex flex-col gap-4 pb-24">{aulasHoje.map(renderCard)}</div>
-          ) : abaVisivel === 'historico' ? ( // NOVO CORPO DO HISTÓRICO
+          ) : abaVisivel === 'historico' ? (
             aulasPassadas.length === 0 ? <div className="bg-white rounded-[24px] p-8 text-center border border-slate-100 text-slate-400 text-sm font-medium shadow-sm">Nenhuma aula registrada no passado.</div> : <div className="flex flex-col gap-6 pb-24">{Object.entries(aulasPassadasAgrupadas).map(([dataStr, aulasDoDia]) => (<div key={dataStr}><h3 className="text-[13px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-3 ml-2"><span className="w-1.5 h-1.5 rounded-full bg-slate-300" />{formatarDataHeader(dataStr)}</h3><div className="flex flex-col gap-4">{aulasDoDia.map(renderCard)}</div></div>))}</div>
           ) : (
             aulasProgramadas.length === 0 ? <div className="bg-white rounded-[24px] p-8 text-center border border-slate-100 text-slate-400 text-sm font-medium shadow-sm">{t.aulas.semAulasFuturas}</div> : <div className="flex flex-col gap-6 pb-24">{Object.entries(aulasAgrupadas).map(([dataStr, aulasDoDia]) => (<div key={dataStr}><h3 className="text-[13px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-3 ml-2"><span className="w-1.5 h-1.5 rounded-full bg-slate-300" />{formatarDataHeader(dataStr)}</h3><div className="flex flex-col gap-4">{aulasDoDia.map(renderCard)}</div></div>))}</div>
@@ -552,7 +546,6 @@ export default function AulasTab() {
 
       <button onClick={abrirNovaAula} className="fixed bottom-[88px] right-5 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-[0_4px_20px_rgba(232,67,106,0.45)] flex items-center justify-center z-40 hover:scale-105 active:scale-95 transition-all"><Plus size={28} strokeWidth={2.5} /></button>
 
-      {/* MODAL DE ADICIONAR / EDITAR AULA */}
       {modalAberto && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setModalAberto(false)} />
