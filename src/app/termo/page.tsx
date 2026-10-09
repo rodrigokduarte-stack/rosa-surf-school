@@ -165,9 +165,16 @@ export default function TermoPage() {
       
       if (erroTermo) throw erroTermo
 
-      // 2. ADICIONADO: Salva o nome no CRM para aparecer na busca de aulas
+      // 2. Salva o nome no CRM
       await supabase.from('alunos').insert([{ nome: nome.trim() }])
       
+      // 3. NOVO: Envia notificação para a aba de Atividades e Sininho
+      await supabase.from('historico_atividades').insert([{
+        usuario: 'Website / Termo Online',
+        acao: 'Novo Termo Assinado',
+        detalhes: `O aluno ${nome.trim()} assinou o termo e foi cadastrado no sistema.`
+      }])
+
       setSucesso(true)
     } catch (err: any) {
       console.error(err)
