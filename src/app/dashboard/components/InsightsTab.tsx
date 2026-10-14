@@ -6,6 +6,16 @@ import { formatarValor } from '@/lib/dateUtils'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { Lightbulb, Building, Flame, PieChart, Users, Package, GraduationCap } from 'lucide-react'
 
+// NOVO: Função Mágica para padronizar os nomes e evitar professores duplicados
+function padronizarNomeProf(nomeRaw: string): string {
+  if (!nomeRaw) return ''
+  const limpo = nomeRaw.trim().toLowerCase()
+  if (limpo === '' || limpo === 'sem professor') return '' // Ignora se não houver professor
+  
+  // Coloca a primeira letra maiúscula para ficar bonito na tela (Ex: arthur -> Arthur)
+  return limpo.charAt(0).toUpperCase() + limpo.slice(1)
+}
+
 export default function InsightsTab() {
   const { t, language } = useLanguage()
   const [loading, setLoading] = useState(true)
@@ -17,7 +27,6 @@ export default function InsightsTab() {
   const [topClientes, setTopClientes] = useState<{ nome: string; total: number }[]>([])
   const [topProfessores, setTopProfessores] = useState<{ nome: string; total: number }[]>([])
 
-  // Textos embutidos para não precisarmos editar os dicionários globais novamente
   const textosRanking = { pt: 'Ranking de Professores', en: 'Instructors Ranking', es: 'Ranking de Profesores' }
   const labelRankingProfs = textosRanking[language as keyof typeof textosRanking] || 'Ranking de Professores'
   
@@ -51,27 +60,23 @@ export default function InsightsTab() {
         clientes[nome] = (clientes[nome] || 0) + valor
       }
 
-      // Processa Aulas
       aulas?.forEach(a => {
         const valorPago = a.status_pagamento === 'Pago' ? Number(a.valor_aula) : (a.status_pagamento === 'Parcial' ? Number(a.valor_pago || 0) : 0)
         
-        // Radar CNPJ
         if (['Pix', 'Cartão de Crédito'].includes(a.forma_pagamento)) banc += valorPago
         else if (['Dinheiro', 'Depix'].includes(a.forma_pagamento)) esp += valorPago
 
-        // Raio X Modalidade
         if (a.modalidade === 'Aula Particular') part += valorPago
         else if (a.modalidade === 'Aula Grupo') grp += valorPago
 
-        // Avulsas (Peso Pacotes)
         if (!a.pacote_id) avulso += valorPago
 
-        // Ranking de Professores (Contagem de Aulas)
+        // NOVO: Aplica a função de limpeza antes de contar
         let arrayProfs = Array.isArray(a.nome_professor) ? a.nome_professor : (a.nome_professor ? [a.nome_professor] : [])
         arrayProfs.forEach((profNome: string) => {
-          const nomeLimpo = profNome.trim()
-          if (nomeLimpo && nomeLimpo.toLowerCase() !== 'sem professor') {
-            profs[nomeLimpo] = (profs[nomeLimpo] || 0) + 1
+          const nomeUnificado = padronizarNomeProf(profNome)
+          if (nomeUnificado) {
+            profs[nomeUnificado] = (profs[nomeUnificado] || 0) + 1
           }
         })
 
@@ -79,15 +84,12 @@ export default function InsightsTab() {
         somarCliente(a.nome_cliente, valorPago)
       })
 
-      // Processa Pacotes
       pacotes?.forEach(p => {
         const valorPago = Number(p.valor_pago || 0)
 
-        // Radar CNPJ
         if (['Pix', 'Cartão de Crédito'].includes(p.forma_pagamento)) banc += valorPago
         else if (['Dinheiro', 'Depix'].includes(p.forma_pagamento)) esp += valorPago
 
-        // Peso Pacotes
         pct += valorPago
 
         somarMes(p.created_at, valorPago)
@@ -98,21 +100,18 @@ export default function InsightsTab() {
       setModalidadeData({ particular: part, grupo: grp })
       setPacotesData({ avulso, pacote: pct })
 
-      // Ordena Meses e formata (Ex: 2026-05 para 05/2026)
       const mesesArray = Object.entries(meses)
         .map(([mes, total]) => ({ mes: mes.split('-').reverse().join('/'), total }))
         .sort((a, b) => b.total - a.total)
         .slice(0, 3)
       setTopMeses(mesesArray)
 
-      // Ordena Clientes
       const clientesArray = Object.entries(clientes)
         .map(([nome, total]) => ({ nome, total }))
         .sort((a, b) => b.total - a.total)
         .slice(0, 5)
       setTopClientes(clientesArray)
 
-      // Ordena Professores
       const profsArray = Object.entries(profs)
         .map(([nome, total]) => ({ nome, total }))
         .sort((a, b) => b.total - a.total)
@@ -158,7 +157,6 @@ export default function InsightsTab() {
       ) : (
         <div className="flex flex-col gap-5">
 
-          {/* 1. Radar do CNPJ */}
           <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-5">
             <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
               <Building size={16} className="text-indigo-500" /> {t.insightsTab.radarCnpj}
@@ -184,7 +182,6 @@ export default function InsightsTab() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* 3. Raio-X Modalidade */}
             <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-5 flex flex-col justify-between">
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
                 <PieChart size={16} className="text-rose-500" /> {t.insightsTab.raioX}
@@ -201,7 +198,6 @@ export default function InsightsTab() {
               </div>
             </div>
 
-            {/* 5. Peso Pacotes */}
             <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-5 flex flex-col justify-between">
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
                 <Package size={16} className="text-sky-500" /> {t.insightsTab.pesoPacotes}
@@ -219,7 +215,6 @@ export default function InsightsTab() {
             </div>
           </div>
 
-          {/* 2. Termômetro Temporada */}
           <div className="bg-slate-900 rounded-[24px] shadow-sm p-5">
             <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
               <Flame size={16} className="text-orange-500" /> {t.insightsTab.termometro}
@@ -237,7 +232,6 @@ export default function InsightsTab() {
             </div>
           </div>
 
-          {/* 6. Ranking de Professores (Novo Pódio!) */}
           <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-5">
             <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
               <GraduationCap size={16} className="text-violet-500" /> {labelRankingProfs}
@@ -258,7 +252,6 @@ export default function InsightsTab() {
             </div>
           </div>
 
-          {/* 4. Fidelidade (Clientes) */}
           <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-5">
             <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
               <Users size={16} className="text-pink-500" /> {t.insightsTab.fidelidade}
