@@ -2,17 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { formatarValor } from '@/lib/dateUtils'
+import { formatarValor, parseProfessores } from '@/lib/dateUtils' // <-- ADICIONAMOS A FUNÇÃO DE LIMPEZA AQUI
 import { useLanguage } from '@/contexts/LanguageContext'
 import { Lightbulb, Building, Flame, PieChart, Users, Package, GraduationCap } from 'lucide-react'
 
-// NOVO: Função Mágica para padronizar os nomes e evitar professores duplicados
+// Função Mágica super-reforçada para limpar qualquer lixo da planilha antiga
 function padronizarNomeProf(nomeRaw: string): string {
   if (!nomeRaw) return ''
-  const limpo = nomeRaw.trim().toLowerCase()
-  if (limpo === '' || limpo === 'sem professor') return '' // Ignora se não houver professor
+  // Se vier com aspas ou colchetes perdidos da planilha, limpamos tudo:
+  const limpo = nomeRaw.replace(/["\[\]]/g, '').trim().toLowerCase()
+  if (limpo === '' || limpo === 'sem professor') return '' 
   
-  // Coloca a primeira letra maiúscula para ficar bonito na tela (Ex: arthur -> Arthur)
+  // Primeira letra maiúscula: arthur -> Arthur
   return limpo.charAt(0).toUpperCase() + limpo.slice(1)
 }
 
@@ -71,14 +72,16 @@ export default function InsightsTab() {
 
         if (!a.pacote_id) avulso += valorPago
 
-        // NOVO: Aplica a função de limpeza antes de contar
-        let arrayProfs = Array.isArray(a.nome_professor) ? a.nome_professor : (a.nome_professor ? [a.nome_professor] : [])
-        arrayProfs.forEach((profNome: string) => {
-          const nomeUnificado = padronizarNomeProf(profNome)
-          if (nomeUnificado) {
-            profs[nomeUnificado] = (profs[nomeUnificado] || 0) + 1
-          }
-        })
+        // NOVO: Usa a função oficial do sistema (parseProfessores) que quebra a formatação quebrada da planilha
+        const arrayProfs = parseProfessores(a.nome_professor)
+        if (arrayProfs && arrayProfs.length > 0) {
+          arrayProfs.forEach((profNome: string) => {
+            const nomeUnificado = padronizarNomeProf(profNome)
+            if (nomeUnificado) {
+              profs[nomeUnificado] = (profs[nomeUnificado] || 0) + 1
+            }
+          })
+        }
 
         somarMes(a.data_aula, valorPago)
         somarCliente(a.nome_cliente, valorPago)
@@ -242,7 +245,7 @@ export default function InsightsTab() {
                 <div key={p.nome} className="flex justify-between items-center py-2 border-b border-slate-50 last:border-0">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-black text-slate-300 w-4">{i + 1}º</span>
-                    <span className="text-xs font-bold text-slate-700 truncate max-w-[150px]">{p.nome.split(' ')[0]}</span>
+                    <span className="text-xs font-bold text-slate-700 truncate max-w-[150px]">{p.nome}</span>
                   </div>
                   <span className="text-xs font-black text-slate-800">
                     {p.total} <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{labelAulas}</span>
