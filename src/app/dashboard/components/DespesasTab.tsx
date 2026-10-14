@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 
 export default function DespesasTab() {
-  const { t } = useLanguage() // Tradutor ligado!
+  const { t } = useLanguage()
   const [despesas, setDespesas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -21,7 +21,6 @@ export default function DespesasTab() {
   const [dataDespesa, setDataDespesa] = useState(new Date().toISOString().split('T')[0])
   const [categoria, setCategoria] = useState('Manutenção')
 
-  // Traduz as categorias para o seletor visual, mas salva em português no banco para manter o histórico
   const CATEGORIAS_MAP: Record<string, string> = {
     'Manutenção': t.despesasTab.manutencao,
     'Equipamentos': t.despesasTab.equipamentos,
@@ -49,11 +48,14 @@ export default function DespesasTab() {
     e.preventDefault()
     setSalvando(true)
 
+    const desc = descricao.trim()
+    const val = parseFloat(valor)
+
     const { error } = await supabase
       .from('despesas')
       .insert([{
-        descricao: descricao.trim(),
-        valor: parseFloat(valor),
+        descricao: desc,
+        valor: val,
         data_despesa: dataDespesa,
         categoria: categoria 
       }])
@@ -61,6 +63,19 @@ export default function DespesasTab() {
     if (error) {
       alert(t.despesasTab.erroSalvar + error.message)
     } else {
+      
+      // NOVO: REGISTRO DE ATIVIDADE AO ADICIONAR DESPESA
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        await supabase.from('historico_atividades').insert([{
+          usuario: user?.email || 'Sistema',
+          acao: 'Nova Despesa',
+          detalhes: `Registrou uma saída de ${formatarValor(val)} para "${desc}" (${categoria}).`
+        }])
+      } catch (err) {
+        console.error(err)
+      }
+
       setDescricao('')
       setValor('')
       setIsModalOpen(false)
@@ -69,11 +84,26 @@ export default function DespesasTab() {
     setSalvando(false)
   }
 
-  async function excluirDespesa(id: string) {
+  async function excluirDespesa(item: any) {
     if (!window.confirm(t.despesasTab.confirmaArquivar)) return
     
-    const { error } = await supabase.from('despesas').update({ excluido: true }).eq('id', id)
-    if (!error) carregarDespesas()
+    const { error } = await supabase.from('despesas').update({ excluido: true }).eq('id', item.id)
+    
+    if (!error) {
+      // NOVO: REGISTRO DE ATIVIDADE AO EXCLUIR DESPESA
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        await supabase.from('historico_atividades').insert([{
+          usuario: user?.email || 'Sistema',
+          acao: 'Despesa Arquivada',
+          detalhes: `Removeu o registro de saída no valor de ${formatarValor(item.valor)} ("${item.descricao}").`
+        }])
+      } catch (err) {
+        console.error(err)
+      }
+      
+      carregarDespesas()
+    }
   }
 
   const totalMes = despesas.reduce((acc, current) => acc + Number(current.valor), 0)
@@ -122,7 +152,7 @@ export default function DespesasTab() {
               </div>
               <div className="flex flex-col items-end gap-2">
                 <span className="font-black text-rose-600 text-sm">-{formatarValor(item.valor)}</span>
-                <button onClick={() => excluirDespesa(item.id)} className="text-slate-300 hover:text-rose-500 transition-colors">
+                <button onClick={() => excluirDespesa(item)} className="text-slate-300 hover:text-rose-500 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </div>
