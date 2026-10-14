@@ -18,11 +18,10 @@ interface NovoPacoteForm {
   forma_pagamento?: string
 }
 
-// CORREÇÃO: 'Depix' adicionado à lista de formas de pagamento
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Depix', 'Outro']
 
 export default function PacotesTab() {
-  const { t } = useLanguage() // Cérebro ativado!
+  const { t } = useLanguage()
   const [pacotes, setPacotes] = useState<Pacote[]>([])
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
@@ -57,20 +56,50 @@ export default function PacotesTab() {
       status: 'Ativo' as const,
     }
     const { error } = await supabase.from('pacotes').insert([payload])
-    setSalvando(false)
+    
     if (!error) {
+      
+      // NOVO: REGISTRO DE ATIVIDADE - NOVO PACOTE
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        await supabase.from('historico_atividades').insert([{
+          usuario: user?.email || 'Sistema',
+          acao: 'Novo Pacote',
+          detalhes: `Vendeu um pacote de ${dados.total_aulas} aulas para ${dados.nome_cliente} no valor de ${formatarValor(dados.valor_total)}.`
+        }])
+      } catch (err) {
+        console.error(err)
+      }
+
       reset({ total_aulas: 0, valor_total: 0, valor_pago: 0 })
       carregarPacotes()
       setModalAberto(false) 
     } else {
       alert(t.pacotesTab.erroBanco)
     }
+    setSalvando(false)
   }
 
-  async function finalizarPacote(id: string) {
+  async function finalizarPacote(pacote: Pacote) {
     if (!window.confirm(t.pacotesTab.confirmaFinalizar)) return
-    setFinalizando(id)
-    await supabase.from('pacotes').update({ status: 'Finalizado' }).eq('id', id)
+    setFinalizando(pacote.id)
+    
+    const { error } = await supabase.from('pacotes').update({ status: 'Finalizado' }).eq('id', pacote.id)
+    
+    if (!error) {
+       // NOVO: REGISTRO DE ATIVIDADE - PACOTE FINALIZADO
+       try {
+        const { data: { user } } = await supabase.auth.getUser()
+        await supabase.from('historico_atividades').insert([{
+          usuario: user?.email || 'Sistema',
+          acao: 'Pacote Finalizado',
+          detalhes: `Marcou manualmente o pacote de ${pacote.nome_cliente} como finalizado.`
+        }])
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    
     setFinalizando(null)
     carregarPacotes()
   }
@@ -127,7 +156,7 @@ export default function PacotesTab() {
                       </p>
                     </div>
                     <button
-                      onClick={() => finalizarPacote(pacote.id)}
+                      onClick={() => finalizarPacote(pacote)}
                       disabled={finalizando === pacote.id}
                       className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors shrink-0"
                     >
