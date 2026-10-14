@@ -33,7 +33,6 @@ type DevedorAgrupado = {
   itens: ItemDivida[]
 }
 
-// CORREÇÃO: 'Depix' adicionado à lista de formas de pagamento
 const FORMAS_PAGAMENTO = ['Pix', 'Cartão de Crédito', 'Dinheiro', 'Depix', 'Outro']
 
 function calcularDiasAtraso(dataReferencia: string) {
@@ -77,7 +76,7 @@ export default function InadimplentesTab() {
   
   // ESTADOS DO PAGAMENTO
   const [valorRecebido, setValorRecebido] = useState<string>('')
-  const [valorDesconto, setValorDesconto] = useState<string>('') // NOVO: Estado do Desconto
+  const [valorDesconto, setValorDesconto] = useState<string>('') 
   const [formaPagamento, setFormaPagamento] = useState<string>('Pix')
   const [processando, setProcessando] = useState(false)
 
@@ -167,14 +166,18 @@ export default function InadimplentesTab() {
 
   useEffect(() => { carregarInadimplentes() }, [carregarInadimplentes])
 
-  // NOVO: Lógica de Pagamento com Desconto
   async function confirmarPagamento(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!devedorSelecionado || (!valorRecebido && !valorDesconto) || !formaPagamento) return
     
     setProcessando(true)
-    let saldoRestanteReal = parseFloat(valorRecebido) || 0
-    let saldoDesconto = parseFloat(valorDesconto) || 0
+    
+    // Guardamos o valor original para poder colocar na notificação
+    const totalRecebidoReal = parseFloat(valorRecebido) || 0
+    const totalDesconto = parseFloat(valorDesconto) || 0
+
+    let saldoRestanteReal = totalRecebidoReal
+    let saldoDesconto = totalDesconto
     
     const promessasAtualizacao = []
 
@@ -204,7 +207,7 @@ export default function InadimplentesTab() {
             supabase.from('registro_aulas').update({ 
               status_pagamento: quitouTotalmente ? 'Pago' : 'Parcial',
               valor_pago: novoValorPago,
-              valor_aula: novoValorTotal, // Atualiza o preço da aula
+              valor_aula: novoValorTotal, 
               forma_pagamento: formaPagamento
             }).eq('id', item.original_id)
           )
@@ -212,7 +215,7 @@ export default function InadimplentesTab() {
           promessasAtualizacao.push(
             supabase.from('pacotes').update({ 
               valor_pago: novoValorPago,
-              valor_total: novoValorTotal, // Atualiza o preço do pacote
+              valor_total: novoValorTotal, 
               forma_pagamento: formaPagamento
             }).eq('id', item.original_id)
           )
@@ -222,10 +225,27 @@ export default function InadimplentesTab() {
 
     await Promise.all(promessasAtualizacao)
 
+    // NOVO: REGISTRO DA ATIVIDADE PARA A ABA "Sininho"
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      let msgDetalhes = `Recebeu ${formatarValor(totalRecebidoReal)} de ${devedorSelecionado.nome} em ${formaPagamento}.`
+      if (totalDesconto > 0) {
+        msgDetalhes += ` (Incluiu um desconto/ajuste de ${formatarValor(totalDesconto)})`
+      }
+
+      await supabase.from('historico_atividades').insert([{
+        usuario: user?.email || 'Sistema',
+        acao: 'Pagamento Recebido',
+        detalhes: msgDetalhes
+      }])
+    } catch (err) {
+      console.error("Erro ao registrar atividade:", err)
+    }
+
     setProcessando(false)
     setDevedorSelecionado(null)
     setValorRecebido('')
-    setValorDesconto('') // Limpa desconto
+    setValorDesconto('') 
     setFormaPagamento('Pix') 
     carregarInadimplentes()
   }
@@ -397,7 +417,7 @@ export default function InadimplentesTab() {
                         onClick={() => { 
                           setDevedorSelecionado(dev); 
                           setValorRecebido(restante.toString()); 
-                          setValorDesconto(''); // zera o desconto
+                          setValorDesconto(''); 
                           setFormaPagamento('Pix'); 
                         }} 
                         className={`w-full text-white font-black text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-sm ${cfg.badge}`}
@@ -468,7 +488,6 @@ export default function InadimplentesTab() {
                 </div>
               </div>
 
-              {/* NOVO: CAMPO DE DESCONTO */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex justify-between items-center">
                   <span>Teve desconto na negociação?</span>
