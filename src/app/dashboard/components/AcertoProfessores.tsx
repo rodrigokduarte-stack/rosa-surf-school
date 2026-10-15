@@ -6,7 +6,7 @@ import { Periodo, getRange, parseProfessores, formatarValor } from '@/lib/dateUt
 import { ChevronDown, ChevronRight, User, Calendar, Receipt, Calculator } from 'lucide-react'
 
 interface AcertoProfessoresProps {
-  periodo: Periodo
+  periodo: Periodo | string // Aceita os períodos padrão e também strings como "05/2026"
 }
 
 interface AulaDetalhe {
@@ -30,6 +30,36 @@ function formatarDataCurta(dataStr: string) {
   return `${partes[2]}/${partes[1]}`
 }
 
+// NOVO: Função para lidar com meses específicos vindos do seletor
+function getCustomRange(periodoStr: string) {
+  // Tenta ver se é um dos padrões conhecidos
+  if (periodoStr === 'Tudo' || periodoStr === 'Hoje' || periodoStr === 'SemanaAtual' || periodoStr === 'MesAtual' || periodoStr === 'MesAnterior') {
+    return getRange(periodoStr as Periodo)
+  }
+
+  // Se for formato "MM/YYYY" (Mês Específico)
+  if (periodoStr.includes('/')) {
+    const [mes, ano] = periodoStr.split('/')
+    if (mes && ano) {
+      const dataInicio = new Date(Number(ano), Number(mes) - 1, 1)
+      const dataFim = new Date(Number(ano), Number(mes), 0) // Último dia do mês
+
+      // Formata para YYYY-MM-DD
+      const formatIso = (d: Date) => {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const dd = String(d.getDate()).padStart(2, '0')
+        return `${y}-${m}-${dd}`
+      }
+
+      return { inicio: formatIso(dataInicio), fim: formatIso(dataFim) }
+    }
+  }
+
+  // Fallback seguro
+  return { inicio: null, fim: null }
+}
+
 export default function AcertoProfessores({ periodo }: AcertoProfessoresProps) {
   const [resumo, setResumo] = useState<ResumoProfessor[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,9 +67,10 @@ export default function AcertoProfessores({ periodo }: AcertoProfessoresProps) {
 
   const carregarDados = useCallback(async () => {
     setLoading(true)
-    let { inicio, fim } = getRange(periodo)
+    
+    // CORREÇÃO AQUI: Usa a nova função que entende os meses específicos
+    let { inicio, fim } = getCustomRange(String(periodo))
 
-    // Busca apenas as aulas não excluídas no período selecionado
     let aulasQ = supabase
       .from('registro_aulas')
       .select('id, data_aula, nome_cliente, nome_professor')
