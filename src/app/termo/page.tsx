@@ -165,10 +165,18 @@ export default function TermoPage() {
       
       if (erroTermo) throw erroTermo
 
-      // 2. Salva o nome no CRM
-      await supabase.from('alunos').insert([{ nome: nome.trim() }])
+      // 2. CORREÇÃO DO BUG: Salva o nome no CRM apenas se o aluno não existir
+      const { data: alunoExistente } = await supabase
+        .from('alunos')
+        .select('id')
+        .ilike('nome', nome.trim()) // ilike ignora maiúsculas/minúsculas
+        .limit(1)
+        
+      if (!alunoExistente || alunoExistente.length === 0) {
+        await supabase.from('alunos').insert([{ nome: nome.trim() }])
+      }
       
-      // 3. NOVO: Envia notificação para a aba de Atividades e Sininho
+      // 3. Envia notificação para a aba de Atividades e Sininho
       await supabase.from('historico_atividades').insert([{
         usuario: 'Website / Termo Online',
         acao: 'Novo Termo Assinado',
