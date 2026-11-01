@@ -302,6 +302,15 @@ export default function FinanceiroTab() {
     (isMes) ? t.financeiroTab.quemPagarMes :
     t.financeiroTab.historicoPagamentos
 
+  // Lógica para enviar o período correto para o componente de professores
+  let periodoRepasse = periodo as string
+  if (periodo === 'mes_especifico' && mesSelecionado) {
+    const [anoStr, mesStr] = mesSelecionado.split('-')
+    periodoRepasse = `${mesStr}/${anoStr}` // Formata "YYYY-MM" para "MM/YYYY"
+  } else if (periodo === 'ano' || periodo === 'ano_especifico') {
+    periodoRepasse = 'tudo'
+  }
+
   return (
     <div className="px-4 py-2 flex flex-col gap-6" id="relatorio-financeiro">
 
@@ -542,8 +551,8 @@ export default function FinanceiroTab() {
                 {t.financeiroTab.equipe}
               </span>
             </div>
-            <div className="bg-white rounded-[20px] p-2 print:p-0 border border-slate-100/50">
-              <AcertoProfessores periodo={['ano', 'ano_especifico', 'mes_especifico'].includes(periodo) ? 'tudo' : (periodo as any)} />
+            <div className="bg-white rounded-[20px] p-2 print:p-0 border border-slate-100/50 print:border-none">
+              <AcertoProfessores periodo={periodoRepasse} />
             </div>
           </div>
 
